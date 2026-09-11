@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { getNatRules, addNatRule, updateNatRule, deleteNatRule, getInterfaces } from '../api/client';
+import { getNatRules, addNatRule, updateNatRule, deleteNatRule, toggleNatRule, getInterfaces } from '../api/client';
 import type { NatRule } from '../types';
 
 const inputCls = 'w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded focus:outline-none focus:border-blue-500';
@@ -15,6 +15,7 @@ const EMPTY_RULE: NatRule = {
   translation_address: null,
   translation_port: null,
   log: null,
+  disabled: false,
 };
 
 export default function NatPage() {
@@ -126,6 +127,23 @@ export default function NatPage() {
     }
   };
 
+  const handleToggle = async (rule: NatRule) => {
+    const disabled = !rule.disabled;
+    setWorking('toggle-' + rule.number);
+    setErr('');
+    setMsg('');
+    setRules(prev => prev.map(r => r.number === rule.number ? { ...r, disabled } : r));
+    try {
+      await toggleNatRule(rule.number, disabled);
+      setMsg(`NAT rule ${rule.number} ${disabled ? 'disable' : 'enable'} staged — review and commit`);
+    } catch (e: any) {
+      setErr('Toggle error: ' + (e.response?.data?.detail || e.message));
+      load();
+    } finally {
+      setWorking(null);
+    }
+  };
+
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
@@ -175,7 +193,7 @@ export default function NatPage() {
             </thead>
             <tbody className="divide-y divide-gray-700">
               {rules.map(r => (
-                <tr key={r.number} className="hover:bg-gray-800/50">
+                <tr key={r.number} className={`hover:bg-gray-800/50 ${r.disabled ? 'opacity-50' : ''}`}>
                   <td className="px-4 py-2.5 font-mono text-gray-300">{r.number}</td>
                   <td className="px-4 py-2.5 font-mono text-sm">{r.inbound_interface || 'any'}</td>
                   <td className="px-4 py-2.5 text-sm">{r.protocol || 'all'}</td>
@@ -188,8 +206,17 @@ export default function NatPage() {
                   <td className="px-4 py-2.5 text-sm text-gray-400">
                     {r.description || '-'}
                     {r.log && <span className="ml-2 px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-900 text-blue-300 align-middle">LOG</span>}
+                    {r.disabled && <span className="ml-2 px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-700 text-gray-400 align-middle">OFF</span>}
                   </td>
                   <td className="px-4 py-2.5 text-right whitespace-nowrap">
+                    <button
+                      onClick={() => handleToggle(r)}
+                      disabled={isWorking('toggle-' + r.number)}
+                      title={r.disabled ? 'Enable rule' : 'Disable rule'}
+                      className={`text-sm mr-3 disabled:opacity-50 ${r.disabled ? 'text-green-400 hover:text-green-300' : 'text-yellow-400 hover:text-yellow-300'}`}
+                    >
+                      {isWorking('toggle-' + r.number) ? '…' : r.disabled ? 'Enable' : 'Disable'}
+                    </button>
                     <button onClick={() => openEdit(r)} className="text-blue-400 hover:text-blue-300 text-sm mr-3">Edit</button>
                     <button onClick={() => handleDelete(r.number)} disabled={isWorking('del-' + r.number)} className="text-red-400 hover:text-red-300 text-sm disabled:opacity-50">
                       {isWorking('del-' + r.number) ? '…' : 'Del'}

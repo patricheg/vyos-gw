@@ -2,6 +2,7 @@ import asyncio
 from typing import List
 
 from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
 
 from app.models import NatRule, NatRuleCreate
 from app.services.vyos_client import vyos_client
@@ -56,6 +57,8 @@ def _stage_rule_commands(rule: NatRule):
         staging_area.add(f"{base} translation port '{rule.translation_port}'", f"NAT rule {rule.number} translate port", "nat")
     if rule.log:
         staging_area.add(f"{base} log", f"NAT rule {rule.number} logging", "nat")
+    if rule.disabled:
+        staging_area.add(f"{base} disable", f"NAT rule {rule.number} disabled", "nat")
 
 
 @router.get("/destination", response_model=List[NatRule])
@@ -90,4 +93,20 @@ async def delete_nat_rule(number: int):
         f"Delete NAT rule {number}",
         "nat"
     )
+    return {"status": "staged", "changes": 1}
+
+
+class NatRuleToggle(BaseModel):
+    disabled: bool
+
+
+@router.put("/destination/rules/{number}/disabled")
+async def toggle_nat_rule(number: int, data: NatRuleToggle):
+    if data.disabled:
+        cmd = f"set nat destination rule {number} disable"
+        desc = f"Disable NAT rule {number}"
+    else:
+        cmd = f"delete nat destination rule {number} disable"
+        desc = f"Enable NAT rule {number}"
+    staging_area.add(cmd, desc, "nat")
     return {"status": "staged", "changes": 1}

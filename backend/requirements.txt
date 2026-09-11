@@ -5,3 +5,4 @@ pydantic-settings==2.15.0
 requests==2.34.2
 urllib3==2.7.0
 python-multipart==0.0.9
+paramiko==4.0.0

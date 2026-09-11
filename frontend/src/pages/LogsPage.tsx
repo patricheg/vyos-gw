@@ -24,6 +24,8 @@ const LOG_SOURCES = [
   { value: 'vrrp', label: 'VRRP' },
   { value: 'conntrack-sync', label: 'Conntrack-sync' },
   { value: 'zebra', label: 'Zebra (routing)' },
+  { value: 'haproxy', label: 'HAProxy' },
+  { value: 'certbot', label: 'Certbot (ACME)' },
   { value: 'cluster', label: 'Cluster' },
 ];
 

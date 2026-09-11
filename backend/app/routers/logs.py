@@ -13,7 +13,7 @@ router = APIRouter(prefix="/api/logs", tags=["logs"])
 async def list_logs(
     source: str = Query(
         "all",
-        pattern="^(all|kernel|firewall|nat|authorization|https|openvpn|vpn|wireguard|lldp|snmp|vrrp|conntrack-sync|zebra|cluster)$",
+        pattern="^(all|kernel|firewall|nat|authorization|https|openvpn|vpn|wireguard|lldp|snmp|vrrp|conntrack-sync|zebra|cluster|haproxy|certbot)$",
     ),
     severity: Optional[str] = Query(None, pattern="^(error|warning|info)$"),
     search: Optional[str] = None,

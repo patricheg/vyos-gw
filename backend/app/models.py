@@ -25,6 +25,12 @@ class FirewallRuleBase(BaseModel):
     protocol: Optional[str] = None
     source_address: Optional[str] = None
     destination_address: Optional[str] = None
+    source_group: Optional[str] = None        # address-group name (mutually exclusive with source_address)
+    destination_group: Optional[str] = None   # address-group name (mutually exclusive with destination_address)
+    source_geoip: Optional[List[str]] = None        # country codes, e.g. ["by", "ru"]
+    source_geoip_inverse: bool = False              # match all EXCEPT the listed countries
+    destination_geoip: Optional[List[str]] = None
+    destination_geoip_inverse: bool = False
     source_port: Optional[str] = None
     destination_port: Optional[str] = None
     description: Optional[str] = None
@@ -48,6 +54,11 @@ class FirewallRulesetBase(BaseModel):
 class FirewallRuleset(FirewallRulesetBase):
     pass
 
+class AddressGroup(BaseModel):
+    name: str
+    description: Optional[str] = None
+    addresses: List[str] = []
+
 # ─── NAT ─────────────────────────────────────────────────────────
 
 class NatRuleBase(BaseModel):
@@ -61,6 +72,7 @@ class NatRuleBase(BaseModel):
     translation_address: Optional[str] = None
     translation_port: Optional[str] = None
     log: Optional[bool] = None
+    disabled: bool = False
 
 class NatRuleCreate(NatRuleBase):
     pass
@@ -124,3 +136,143 @@ class SystemResources(BaseModel):
     disk_used_pct: Optional[int] = None
     disk_available: Optional[str] = None
     uptime: Optional[str] = None
+    device_time: Optional[str] = None
+
+# ─── HAProxy (load-balancing haproxy) ────────────────────────────
+
+class HaproxyServer(BaseModel):
+    name: str
+    address: Optional[str] = None
+    port: Optional[int] = None
+    check: bool = False                # active health check
+    check_port: Optional[int] = None
+    backup: bool = False               # only used when others fail
+    send_proxy: bool = False
+    send_proxy_v2: bool = False
+
+class HaproxyBackend(BaseModel):
+    name: str
+    description: Optional[str] = None
+    mode: Optional[Literal["http", "tcp"]] = None
+    balance: Optional[Literal["round-robin", "least-connection", "source-address"]] = None
+    logging_facility: Optional[str] = None   # syslog facility: daemon, local0-7
+    ssl_no_verify: bool = False              # re-encrypt to backend, don't verify its cert
+    ssl_ca_certificate: Optional[str] = None # re-encrypt to backend, verify against this CA
+    servers: List[HaproxyServer] = []
+
+class HaproxyServiceRule(BaseModel):
+    number: int
+    domain_name: Optional[str] = None
+    wildcard_domain: bool = False          # domain-name also matches subdomains
+    url_path_match: Optional[Literal["begin", "end", "exact"]] = None
+    url_path: Optional[str] = None
+    backend: Optional[str] = None          # action: route to backend
+    redirect_location: Optional[str] = None  # action: HTTP redirect
+
+class HaproxyService(BaseModel):
+    name: str
+    description: Optional[str] = None
+    mode: Optional[Literal["http", "tcp"]] = None
+    port: Optional[int] = None
+    listen_addresses: List[str] = []   # empty = all router addresses
+    backends: List[str] = []           # backend members (multi-value node)
+    redirect_http_to_https: bool = False
+    ssl_certificate: Optional[str] = None
+    logging_facility: Optional[str] = None
+    rules: List[HaproxyServiceRule] = []
+
+class HaproxyGlobals(BaseModel):
+    max_connections: Optional[int] = None
+    timeout_client: Optional[int] = None
+    timeout_connect: Optional[int] = None
+    timeout_server: Optional[int] = None
+
+class HaproxyConfig(HaproxyGlobals):
+    services: List[HaproxyService] = []
+    backends: List[HaproxyBackend] = []
+
+# ─── PKI (certificates) ──────────────────────────────────────────
+
+class PkiCertificate(BaseModel):
+    name: str
+    description: Optional[str] = None
+    has_private_key: bool = False
+    revoked: bool = False
+    acme: bool = False                      # Let's Encrypt managed
+    acme_domains: List[str] = []
+    acme_email: Optional[str] = None
+    acme_rsa_key_size: Optional[int] = None
+    acme_url: Optional[str] = None
+    acme_listen_address: Optional[str] = None
+    subject: Optional[str] = None
+    issuer: Optional[str] = None
+    not_before: Optional[str] = None
+    not_after: Optional[str] = None
+    expires_in_days: Optional[int] = None
+    serial: Optional[str] = None
+    sans: List[str] = []
+
+class PkiCaCertificate(BaseModel):
+    name: str
+    description: Optional[str] = None
+    has_private_key: bool = False
+    revoked: bool = False
+    subject: Optional[str] = None
+    issuer: Optional[str] = None
+    not_before: Optional[str] = None
+    not_after: Optional[str] = None
+    expires_in_days: Optional[int] = None
+
+class PkiConfig(BaseModel):
+    certificates: List[PkiCertificate] = []
+    ca_certificates: List[PkiCaCertificate] = []
+
+class PkiCertificateImport(BaseModel):
+    name: str
+    certificate: str                      # PEM text
+    private_key: Optional[str] = None     # PEM text
+    description: Optional[str] = None
+
+class PkiCaImport(BaseModel):
+    name: str
+    certificate: str                      # PEM text
+    description: Optional[str] = None
+
+class PkiAcmeCreate(BaseModel):
+    name: str
+    domains: List[str]
+    email: str
+    listen_address: Optional[str] = None
+    rsa_key_size: Literal[2048, 3072, 4096] = 2048
+    url: Optional[str] = None             # default: Let's Encrypt v2
+    description: Optional[str] = None
+
+# ─── Routing ─────────────────────────────────────────────────────
+
+class RouteNexthop(BaseModel):
+    ip: Optional[str] = None
+    interface: Optional[str] = None
+    active: bool = True
+    directly_connected: bool = False
+
+class RouteEntry(BaseModel):
+    prefix: str
+    protocol: str
+    distance: Optional[int] = None
+    metric: Optional[int] = None
+    selected: bool = False
+    installed: bool = False
+    uptime: Optional[str] = None
+    nexthops: List[RouteNexthop] = []
+
+class StaticNextHop(BaseModel):
+    address: str
+    distance: Optional[int] = None
+
+class StaticRoute(BaseModel):
+    prefix: str
+    description: Optional[str] = None
+    next_hops: List[StaticNextHop] = []
+    blackhole: bool = False
+    blackhole_distance: Optional[int] = None
+    disabled: bool = False

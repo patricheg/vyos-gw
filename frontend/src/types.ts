@@ -15,6 +15,12 @@ export interface FirewallRule {
   protocol: string | null;
   source_address: string | null;
   destination_address: string | null;
+  source_group: string | null;
+  destination_group: string | null;
+  source_geoip: string[] | null;
+  source_geoip_inverse: boolean;
+  destination_geoip: string[] | null;
+  destination_geoip_inverse: boolean;
   source_port: string | null;
   destination_port: string | null;
   description: string | null;
@@ -22,6 +28,12 @@ export interface FirewallRule {
   state_established: boolean | null;
   state_related: boolean | null;
   state_new: boolean | null;
+}
+
+export interface AddressGroup {
+  name: string;
+  description: string | null;
+  addresses: string[];
 }
 
 export interface FirewallRuleset {
@@ -64,6 +76,7 @@ export interface SystemResources {
   disk_used_pct: number | null;
   disk_available: string | null;
   uptime: string | null;
+  device_time: string | null;
 }
 
 export interface FirewallLogEntry {
@@ -100,4 +113,176 @@ export interface NatRule {
   translation_address: string | null;
   translation_port: string | null;
   log: boolean | null;
+  disabled: boolean;
+}
+
+// HAProxy (load-balancing haproxy)
+export interface HaproxyServer {
+  name: string;
+  address: string | null;
+  port: number | null;
+  check: boolean;
+  check_port: number | null;
+  backup: boolean;
+  send_proxy: boolean;
+  send_proxy_v2: boolean;
+}
+
+export interface HaproxyBackend {
+  name: string;
+  description: string | null;
+  mode: 'http' | 'tcp' | null;
+  balance: 'round-robin' | 'least-connection' | 'source-address' | null;
+  logging_facility: string | null;
+  ssl_no_verify: boolean;
+  ssl_ca_certificate: string | null;
+  servers: HaproxyServer[];
+}
+
+export interface HaproxyServiceRule {
+  number: number;
+  domain_name: string | null;
+  wildcard_domain: boolean;
+  url_path_match: 'begin' | 'end' | 'exact' | null;
+  url_path: string | null;
+  backend: string | null;
+  redirect_location: string | null;
+}
+
+export interface HaproxyService {
+  name: string;
+  description: string | null;
+  mode: 'http' | 'tcp' | null;
+  port: number | null;
+  listen_addresses: string[];
+  backends: string[];
+  redirect_http_to_https: boolean;
+  ssl_certificate: string | null;
+  logging_facility: string | null;
+  rules: HaproxyServiceRule[];
+}
+
+export interface HaproxyGlobals {
+  max_connections: number | null;
+  timeout_client: number | null;
+  timeout_connect: number | null;
+  timeout_server: number | null;
+}
+
+export interface HaproxyConfig extends HaproxyGlobals {
+  services: HaproxyService[];
+  backends: HaproxyBackend[];
+}
+
+// PKI (certificates)
+export interface PkiCertificate {
+  name: string;
+  description: string | null;
+  has_private_key: boolean;
+  revoked: boolean;
+  acme: boolean;
+  acme_domains: string[];
+  acme_email: string | null;
+  acme_rsa_key_size: number | null;
+  acme_url: string | null;
+  acme_listen_address: string | null;
+  subject: string | null;
+  issuer: string | null;
+  not_before: string | null;
+  not_after: string | null;
+  expires_in_days: number | null;
+  serial: string | null;
+  sans: string[];
+}
+
+export interface PkiCaCertificate {
+  name: string;
+  description: string | null;
+  has_private_key: boolean;
+  revoked: boolean;
+  subject: string | null;
+  issuer: string | null;
+  not_before: string | null;
+  not_after: string | null;
+  expires_in_days: number | null;
+}
+
+export interface PkiConfig {
+  certificates: PkiCertificate[];
+  ca_certificates: PkiCaCertificate[];
+}
+
+export interface PkiAcmeCreate {
+  name: string;
+  domains: string[];
+  email: string;
+  listen_address: string | null;
+  rsa_key_size: 2048 | 3072 | 4096;
+  url: string | null;
+  description: string | null;
+}
+
+export interface RouteNexthop {
+  ip: string | null;
+  interface: string | null;
+  active: boolean;
+  directly_connected: boolean;
+}
+
+export interface RouteEntry {
+  prefix: string;
+  protocol: string;
+  distance: number | null;
+  metric: number | null;
+  selected: boolean;
+  installed: boolean;
+  uptime: string | null;
+  nexthops: RouteNexthop[];
+}
+
+export interface StaticNextHop {
+  address: string;
+  distance: number | null;
+}
+
+export interface StaticRoute {
+  prefix: string;
+  description: string | null;
+  next_hops: StaticNextHop[];
+  blackhole: boolean;
+  blackhole_distance: number | null;
+  disabled: boolean;
+}
+
+export interface ConnectionStatus {
+  connected: boolean;
+  host: string | null;
+  port: number | null;
+  label: string | null;
+  host_name: string | null;
+  version: string | null;
+}
+
+export interface SavedDevice {
+  id: string;
+  host: string;
+  port: number;
+  label: string | null;
+  last_used: string | null;
+}
+
+export interface ConnectResult {
+  status: 'ok' | 'api_failed';
+  host_name?: string | null;
+  version?: string | null;
+  detail?: string;
+  ssh_available?: boolean;
+  ssh_banner?: string | null;
+}
+
+export interface SshSetupResult {
+  status: 'ok';
+  api_key: string;
+  host_name?: string | null;
+  version?: string | null;
 }

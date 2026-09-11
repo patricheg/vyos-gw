@@ -1,13 +1,22 @@
 import { Link, useLocation } from 'react-router-dom';
 import { useEffect, useState, useCallback } from 'react';
-import { getStaged, commitStaged, discardStaged, removeStaged } from '../api/client';
+import { getStaged, commitStaged, discardStaged, removeStaged, getConnectionStatus, saveSystemConfig } from '../api/client';
 import type { StagedChange } from '../api/client';
 
-export default function Layout({ children }: { children: React.ReactNode }) {
+export default function Layout({ children, onSwitchDevice }: { children: React.ReactNode; onSwitchDevice?: () => void }) {
   const loc = useLocation();
   const [staged, setStaged] = useState<StagedChange[]>([]);
   const [stagedLoading, setStagedLoading] = useState(false);
   const [stagedMsg, setStagedMsg] = useState('');
+  const [deviceLabel, setDeviceLabel] = useState('');
+
+  useEffect(() => {
+    getConnectionStatus()
+      .then(s => {
+        if (s.connected) setDeviceLabel(`${s.label || s.host_name || s.host}${s.port ? `:${s.port}` : ''}`);
+      })
+      .catch(() => {});
+  }, []);
 
   const loadStaged = useCallback(async () => {
     try {
@@ -23,6 +32,23 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     const interval = setInterval(loadStaged, 2000);
     return () => clearInterval(interval);
   }, [loadStaged]);
+
+  const [saveMsg, setSaveMsg] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const handleSave = async () => {
+    setSaving(true);
+    setSaveMsg('');
+    try {
+      await saveSystemConfig();
+      setSaveMsg('Saved');
+      setTimeout(() => setSaveMsg(''), 3000);
+    } catch (e: any) {
+      setSaveMsg('Save failed: ' + (e.response?.data?.detail || e.message));
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const handleCommit = async () => {
     setStagedLoading(true);
@@ -83,12 +109,40 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen">
       <header className="bg-gray-800 border-b border-gray-700">
-        <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
-          <h1 className="text-xl font-bold text-white">VyOS Web Gateway</h1>
-          <nav className="flex gap-2">
+        <div className="max-w-7xl mx-auto px-4 py-3 flex flex-wrap items-center gap-x-4 gap-y-2 justify-between">
+          <div className="flex items-center gap-3 flex-wrap">
+            <h1 className="text-xl font-bold text-white whitespace-nowrap">VyOS Web Gateway</h1>
+            {deviceLabel && (
+              <span className="px-2 py-1 rounded bg-gray-900 border border-gray-600 text-xs font-mono text-green-300 max-w-[220px] truncate" title="Connected device">
+                {deviceLabel}
+              </span>
+            )}
+            {onSwitchDevice && (
+              <button
+                onClick={() => { if (confirm('Disconnect and switch to another device? Uncommitted pending changes will be discarded.')) onSwitchDevice(); }}
+                className="text-xs text-gray-400 hover:text-white underline"
+              >
+                switch
+              </button>
+            )}
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              title="Save running configuration to device flash (write memory)"
+              className="px-3 py-1.5 bg-indigo-600 rounded hover:bg-indigo-500 text-xs text-white font-medium disabled:opacity-50 flex items-center gap-1"
+            >
+              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" /></svg>
+              {saving ? 'Saving…' : 'Save'}
+            </button>
+            {saveMsg && <span className={`text-xs ${saveMsg === 'Saved' ? 'text-green-400' : 'text-red-400'}`}>{saveMsg}</span>}
+          </div>
+          <nav className="flex flex-wrap gap-1.5">
             {nav('/', 'Interfaces')}
             {nav('/firewall', 'Firewall')}
             {nav('/nat', 'NAT')}
+            {nav('/routes', 'Routes')}
+            {nav('/haproxy', 'HAProxy')}
+            {nav('/certificates', 'Certificates')}
             {nav('/firewall-logs', 'FW Logs')}
             {nav('/logs', 'Logs')}
             {nav('/services', 'Services')}

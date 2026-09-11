@@ -5,6 +5,7 @@ Replaces the legacy SSH/netmiko transport with the native VyOS REST API
 so routers and the staging service work as before.
 """
 import json
+import os
 import re
 import shlex
 from typing import List, Optional, Dict, Any
@@ -23,11 +24,12 @@ class VyOSError(RuntimeError):
 
 
 class VyOSClient:
-    def __init__(self):
-        self.base_url = settings.vyos_api_url.rstrip("/")
-        self.key = settings.vyos_api_key
-        self.verify = settings.vyos_api_verify_tls
-        self.timeout = settings.vyos_api_timeout
+    def __init__(self, base_url: Optional[str] = None, key: Optional[str] = None,
+                 verify: Optional[bool] = None, timeout: Optional[int] = None):
+        self.base_url = (base_url or settings.vyos_api_url).rstrip("/")
+        self.key = key if key is not None else settings.vyos_api_key
+        self.verify = settings.vyos_api_verify_tls if verify is None else verify
+        self.timeout = timeout if timeout is not None else settings.vyos_api_timeout
         self._session = requests.Session()
 
     # ─── Transport ────────────────────────────────────────────────
@@ -75,6 +77,25 @@ class VyOSClient:
     def save_config(self) -> str:
         """Persist the running configuration to /config/config.boot."""
         return self._post("/config-file", {"op": "save"}) or "saved"
+
+    def get_config_commands(self) -> str:
+        """Return the running configuration as 'set ...' commands (for backup)."""
+        return self._post("/show", {"op": "show", "path": ["configuration", "commands"]}) or ""
+
+    def restore_config_commands(self, commands: List[str], chunk_size: int = 100) -> str:
+        """Apply set/delete commands in chunks (config restore)."""
+        applied = 0
+        for i in range(0, len(commands), chunk_size):
+            chunk = commands[i:i + chunk_size]
+            try:
+                self.exec_config(chunk)
+            except VyOSError as e:
+                raise VyOSError(
+                    f"Restore failed at command #{i + 1} "
+                    f"({chunk[0][:120]!r}...): {e}"
+                ) from e
+            applied += len(chunk)
+        return f"Applied {applied} command(s)"
 
     # ─── Interfaces ───────────────────────────────────────────────
 
@@ -208,6 +229,10 @@ class VyOSClient:
             state = rcfg.get("state") or {}
             source = rcfg.get("source") or {}
             dest = rcfg.get("destination") or {}
+            src_group = source.get("group") or {}
+            dst_group = dest.get("group") or {}
+            src_geoip = source.get("geoip") or {}
+            dst_geoip = dest.get("geoip") or {}
             ruleset.rules.append(FirewallRule(
                 number=int(num_str),
                 action=rcfg.get("action", "drop"),
@@ -215,6 +240,12 @@ class VyOSClient:
                 protocol=rcfg.get("protocol"),
                 source_address=source.get("address"),
                 destination_address=dest.get("address"),
+                source_group=VyOSClient._scalar(src_group.get("address-group")),
+                destination_group=VyOSClient._scalar(dst_group.get("address-group")),
+                source_geoip=sorted(VyOSClient._as_list(src_geoip.get("country-code"))) or None,
+                source_geoip_inverse="inverse-match" in src_geoip,
+                destination_geoip=sorted(VyOSClient._as_list(dst_geoip.get("country-code"))) or None,
+                destination_geoip_inverse="inverse-match" in dst_geoip,
                 source_port=source.get("port"),
                 destination_port=dest.get("port"),
                 log="log" in rcfg,
@@ -225,6 +256,30 @@ class VyOSClient:
             ))
         ruleset.rules.sort(key=lambda r: r.number)
         return ruleset
+
+    def get_address_groups(self) -> List["AddressGroup"]:
+        """Read `firewall group address-group` as structured JSON."""
+        from app.models import AddressGroup
+        try:
+            data = self._post("/retrieve", {"op": "showConfig", "path": ["firewall", "group"]})
+        except VyOSError as e:
+            if "empty" in str(e).lower():
+                return []
+            raise
+        cfg = data if isinstance(data, dict) else {}
+        if set(cfg.keys()) == {"group"} and isinstance(cfg["group"], dict):
+            cfg = cfg["group"]
+
+        groups: List[AddressGroup] = []
+        for name, gcfg in (cfg.get("address-group") or {}).items():
+            gcfg = gcfg if isinstance(gcfg, dict) else {}
+            groups.append(AddressGroup(
+                name=name,
+                description=VyOSClient._scalar(gcfg.get("description")),
+                addresses=sorted(self._as_list(gcfg.get("address"))),
+            ))
+        groups.sort(key=lambda g: g.name)
+        return groups
 
     @staticmethod
     def _norm_opt(value, sentinel: str):
@@ -272,9 +327,366 @@ class VyOSClient:
                 translation_address=translation.get("address"),
                 translation_port=translation.get("port"),
                 log="log" in rcfg,
+                disabled="disable" in rcfg,
             ))
         rules.sort(key=lambda r: r.number)
         return rules
+
+    # ─── Routing ──────────────────────────────────────────────────
+
+    def get_routing_table(self) -> List["RouteEntry"]:
+        """Live IPv4 routing table via `show ip route json` (FRR output)."""
+        import ipaddress
+        from app.models import RouteEntry, RouteNexthop
+        raw = self._post("/show", {"op": "show", "path": ["ip", "route", "json"]})
+        if not raw:
+            return []
+        try:
+            table = json.loads(raw)
+        except (TypeError, ValueError):
+            raise VyOSError("Could not parse 'show ip route json' output")
+        routes: List[RouteEntry] = []
+        for prefix, entries in (table or {}).items():
+            if not isinstance(entries, list):
+                continue
+            for e in entries:
+                nexthops = [
+                    RouteNexthop(
+                        ip=nh.get("ip"),
+                        interface=nh.get("interfaceName"),
+                        active=bool(nh.get("active")),
+                        directly_connected=bool(nh.get("directlyConnected")),
+                    )
+                    for nh in e.get("nexthops", [])
+                ]
+                routes.append(RouteEntry(
+                    prefix=e.get("prefix", prefix),
+                    protocol=e.get("protocol", "unknown"),
+                    distance=self._to_int(e.get("distance")),
+                    metric=self._to_int(e.get("metric")),
+                    selected=bool(e.get("selected")),
+                    installed=bool(e.get("installed")),
+                    uptime=e.get("uptime"),
+                    nexthops=nexthops,
+                ))
+
+        def _sort_key(r: "RouteEntry"):
+            try:
+                net = ipaddress.ip_network(r.prefix)
+                return (0, int(net.network_address), net.prefixlen)
+            except ValueError:
+                return (1, 0, 0)
+        routes.sort(key=_sort_key)
+        return routes
+
+    def get_static_routes(self) -> List["StaticRoute"]:
+        """Configured `protocols static route` entries (main table, IPv4)."""
+        import ipaddress
+        from app.models import StaticRoute, StaticNextHop
+        try:
+            data = self._post("/retrieve", {"op": "showConfig", "path": ["protocols", "static"]})
+        except VyOSError as e:
+            if "empty" in str(e).lower():
+                return []
+            raise
+        cfg = data if isinstance(data, dict) else {}
+        if set(cfg.keys()) == {"static"} and isinstance(cfg["static"], dict):
+            cfg = cfg["static"]
+
+        routes: List[StaticRoute] = []
+        for prefix, rcfg in (cfg.get("route") or {}).items():
+            if not isinstance(rcfg, dict):
+                continue
+            next_hops = [
+                StaticNextHop(
+                    address=addr,
+                    distance=self._to_int(nhcfg.get("distance")) if isinstance(nhcfg, dict) else None,
+                )
+                for addr, nhcfg in (rcfg.get("next-hop") or {}).items()
+            ]
+            blackhole = rcfg.get("blackhole")
+            routes.append(StaticRoute(
+                prefix=prefix,
+                description=self._scalar(rcfg.get("description")),
+                next_hops=sorted(next_hops, key=lambda n: n.address),
+                blackhole=blackhole is not None,
+                blackhole_distance=self._to_int(blackhole.get("distance")) if isinstance(blackhole, dict) else None,
+                disabled="disable" in rcfg,
+            ))
+
+        def _sort_key(r: "StaticRoute"):
+            try:
+                net = ipaddress.ip_network(r.prefix)
+                return (0, int(net.network_address), net.prefixlen)
+            except ValueError:
+                return (1, 0, 0)
+        routes.sort(key=_sort_key)
+        return routes
+
+    # ─── HAProxy (load-balancing haproxy) ─────────────────────────
+
+    @staticmethod
+    def _as_list(value):
+        if value is None:
+            return []
+        # multi-value leaf nodes come back as {value: {}, ...}
+        if isinstance(value, dict):
+            return list(value.keys())
+        return value if isinstance(value, list) else [value]
+
+    @staticmethod
+    def _to_int(value) -> Optional[int]:
+        try:
+            return int(str(value))
+        except (TypeError, ValueError):
+            return None
+
+    @staticmethod
+    def _scalar(value):
+        """showConfig may wrap a leaf value as {value: {}} — unwrap it."""
+        if isinstance(value, dict):
+            return next(iter(value), None)
+        return value
+
+    @staticmethod
+    def _logging_facility(node) -> Optional[str]:
+        if not isinstance(node, dict):
+            return None
+        logging = node.get("logging")
+        if not isinstance(logging, dict):
+            return None
+        fac = VyOSClient._scalar(logging.get("facility"))
+        return str(fac) if fac else None
+
+    def get_haproxy(self) -> "HaproxyConfig":
+        """Read `load-balancing haproxy` as structured JSON."""
+        from app.models import HaproxyConfig, HaproxyService, HaproxyBackend, HaproxyServer, HaproxyServiceRule
+        try:
+            data = self._post("/retrieve", {"op": "showConfig", "path": ["load-balancing", "haproxy"]})
+        except VyOSError as e:
+            if "empty" in str(e).lower():
+                return HaproxyConfig()
+            raise
+        cfg = data if isinstance(data, dict) else {}
+        if set(cfg.keys()) == {"haproxy"} and isinstance(cfg["haproxy"], dict):
+            cfg = cfg["haproxy"]
+
+        backends = []
+        for name, bcfg in (cfg.get("backend") or {}).items():
+            if not isinstance(bcfg, dict):
+                continue
+            servers = []
+            for sname, scfg in (bcfg.get("server") or {}).items():
+                if not isinstance(scfg, dict):
+                    continue
+                check = scfg.get("check")
+                servers.append(HaproxyServer(
+                    name=sname,
+                    address=scfg.get("address"),
+                    port=self._to_int(scfg.get("port")),
+                    check=check is not None,
+                    check_port=self._to_int(check.get("port")) if isinstance(check, dict) else None,
+                    backup="backup" in scfg,
+                    send_proxy="send-proxy" in scfg,
+                    send_proxy_v2="send-proxy-v2" in scfg,
+                ))
+            ssl = bcfg.get("ssl") or {}
+            backends.append(HaproxyBackend(
+                name=name,
+                description=self._scalar(bcfg.get("description")),
+                mode=self._scalar(bcfg.get("mode")),
+                balance=self._scalar(bcfg.get("balance")),
+                logging_facility=self._logging_facility(bcfg),
+                ssl_no_verify=isinstance(ssl, dict) and "no-verify" in ssl,
+                ssl_ca_certificate=self._scalar(ssl.get("ca-certificate")) if isinstance(ssl, dict) else None,
+                servers=servers,
+            ))
+
+        services = []
+        for name, scfg in (cfg.get("service") or {}).items():
+            if not isinstance(scfg, dict):
+                continue
+            ssl = scfg.get("ssl") or {}
+            rules = []
+            for rnum, rcfg in (scfg.get("rule") or {}).items():
+                if not isinstance(rcfg, dict):
+                    continue
+                url_path_node = rcfg.get("url-path") or {}
+                url_match, url_value = None, None
+                if isinstance(url_path_node, dict):
+                    for mtype in ("begin", "end", "exact"):
+                        if mtype in url_path_node:
+                            url_match = mtype
+                            v = self._scalar(url_path_node[mtype])
+                            url_value = str(v) if v else None
+                            break
+                set_node = rcfg.get("set") or {}
+                backend = self._scalar(set_node.get("backend")) if isinstance(set_node, dict) else None
+                redirect = self._scalar(set_node.get("redirect-location")) if isinstance(set_node, dict) else None
+                rules.append(HaproxyServiceRule(
+                    number=int(rnum),
+                    domain_name=self._scalar(rcfg.get("domain-name")),
+                    wildcard_domain="wildcard-domain" in rcfg,
+                    url_path_match=url_match,
+                    url_path=url_value,
+                    backend=str(backend) if backend else None,
+                    redirect_location=str(redirect) if redirect else None,
+                ))
+            rules.sort(key=lambda r: r.number)
+            services.append(HaproxyService(
+                name=name,
+                description=self._scalar(scfg.get("description")),
+                mode=self._scalar(scfg.get("mode")),
+                port=self._to_int(scfg.get("port")),
+                listen_addresses=sorted(str(a) for a in self._as_list(scfg.get("listen-address"))),
+                backends=sorted(str(b) for b in self._as_list(scfg.get("backend"))),
+                redirect_http_to_https="redirect-http-to-https" in scfg,
+                ssl_certificate=self._scalar(ssl.get("certificate")) if isinstance(ssl, dict) else None,
+                logging_facility=self._logging_facility(scfg),
+                rules=rules,
+            ))
+
+        timeouts = cfg.get("timeout") or {}
+        gp = cfg.get("global-parameters") or {}
+        return HaproxyConfig(
+            services=services,
+            backends=backends,
+            max_connections=self._to_int(gp.get("max-connections")) if isinstance(gp, dict) else None,
+            timeout_client=self._to_int(timeouts.get("client")) if isinstance(timeouts, dict) else None,
+            timeout_connect=self._to_int(timeouts.get("connect")) if isinstance(timeouts, dict) else None,
+            timeout_server=self._to_int(timeouts.get("server")) if isinstance(timeouts, dict) else None,
+        )
+
+    # ─── PKI (certificates) ───────────────────────────────────────
+
+    @staticmethod
+    def pem_to_store_body(pem_text: str) -> str:
+        """VyOS stores certs/keys as the bare PEM body (base64, no headers)."""
+        lines = [
+            l.strip() for l in pem_text.replace("\r\n", "\n").splitlines()
+            if l.strip() and not l.startswith("-----")
+        ]
+        return "".join(lines)
+
+    @staticmethod
+    def _decode_cert_pem(pem: str) -> Dict[str, Any]:
+        """Extract subject/issuer/validity from a PEM cert (stdlib ssl parser)."""
+        import ssl
+        import tempfile
+        from datetime import datetime, timezone
+        try:
+            with tempfile.NamedTemporaryFile("w", suffix=".pem", delete=False, newline="\n") as f:
+                f.write(pem)
+                path = f.name
+            info = ssl._ssl._test_decode_cert(path)  # type: ignore[attr-defined]
+        except Exception:
+            return {}
+        finally:
+            try:
+                os.unlink(path)
+            except Exception:
+                pass
+
+        def _name(rdn) -> Optional[str]:
+            # prefer commonName, fall back to full string
+            full = []
+            cn = None
+            for group in rdn or []:
+                for key, value in group:
+                    full.append(f"{key}={value}")
+                    if key == "commonName":
+                        cn = value
+            return cn or (", ".join(full) if full else None)
+
+        result: Dict[str, Any] = {
+            "subject": _name(info.get("subject")),
+            "issuer": _name(info.get("issuer")),
+            "not_before": info.get("notBefore"),
+            "not_after": info.get("notAfter"),
+            "serial": info.get("serialNumber"),
+            "sans": [v for t, v in info.get("subjectAltName", []) if t == "DNS"],
+        }
+        na = info.get("notAfter")
+        if na:
+            try:
+                exp = datetime.strptime(na, "%b %d %H:%M:%S %Y %Z").replace(tzinfo=timezone.utc)
+                result["expires_in_days"] = (exp - datetime.now(timezone.utc)).days
+            except ValueError:
+                pass
+        return result
+
+    def _show_pem(self, path: List[str]) -> Optional[str]:
+        try:
+            out = self._post("/show", {"op": "show", "path": path})
+        except VyOSError:
+            return None
+        out = (out or "").strip()
+        return out if "BEGIN" in out else None
+
+    def get_pki(self) -> "PkiConfig":
+        """Read `pki` config; enrich certs with details decoded from their PEM."""
+        from app.models import PkiConfig, PkiCertificate, PkiCaCertificate
+        try:
+            data = self._post("/retrieve", {"op": "showConfig", "path": ["pki"]})
+        except VyOSError as e:
+            if "empty" in str(e).lower():
+                return PkiConfig()
+            raise
+        cfg = data if isinstance(data, dict) else {}
+        if set(cfg.keys()) == {"pki"} and isinstance(cfg["pki"], dict):
+            cfg = cfg["pki"]
+
+        certificates = []
+        for name, ccfg in (cfg.get("certificate") or {}).items():
+            if not isinstance(ccfg, dict):
+                continue
+            acme = ccfg.get("acme") or {}
+            private = ccfg.get("private") or {}
+            entry = PkiCertificate(
+                name=name,
+                description=ccfg.get("description"),
+                has_private_key=isinstance(private, dict) and "key" in private,
+                revoked="revoke" in ccfg,
+                acme=bool(acme),
+                acme_domains=sorted(self._as_list(acme.get("domain-name"))) if isinstance(acme, dict) else [],
+                acme_email=acme.get("email") if isinstance(acme, dict) else None,
+                acme_rsa_key_size=self._to_int(acme.get("rsa-key-size")) if isinstance(acme, dict) else None,
+                acme_url=acme.get("url") if isinstance(acme, dict) else None,
+                acme_listen_address=acme.get("listen-address") if isinstance(acme, dict) else None,
+            )
+            if "certificate" in ccfg:
+                pem = self._show_pem(["pki", "certificate", name, "pem"])
+                if pem:
+                    details = self._decode_cert_pem(pem)
+                    for k, v in details.items():
+                        setattr(entry, k, v)
+            certificates.append(entry)
+
+        ca_certificates = []
+        for name, ccfg in (cfg.get("ca") or {}).items():
+            if not isinstance(ccfg, dict) or name.startswith("AUTOCHAIN_"):
+                continue
+            private = ccfg.get("private") or {}
+            entry = PkiCaCertificate(
+                name=name,
+                description=ccfg.get("description"),
+                has_private_key=isinstance(private, dict) and "key" in private,
+                revoked="revoke" in ccfg,
+            )
+            if "certificate" in ccfg:
+                pem = self._show_pem(["pki", "ca", name, "pem"])
+                if pem:
+                    details = self._decode_cert_pem(pem)
+                    for k in ("subject", "issuer", "not_before", "not_after", "expires_in_days"):
+                        if k in details:
+                            setattr(entry, k, details[k])
+            ca_certificates.append(entry)
+
+        return PkiConfig(certificates=certificates, ca_certificates=ca_certificates)
+
+    def renew_certbot(self) -> str:
+        """op-mode: renew certbot force (immediate, not staged)."""
+        return self._post("/renew", {"op": "renew", "path": ["certbot", "force"]}) or "renewal done"
 
     # ─── System ───────────────────────────────────────────────────
 
@@ -383,6 +795,11 @@ class VyOSClient:
         except VyOSError:
             pass
 
+        try:
+            res.device_time = (self._post("/show", {"op": "show", "path": ["date"]}) or "").strip() or None
+        except VyOSError:
+            pass
+
         return res
 
     # ─── Services ─────────────────────────────────────────────────
@@ -448,13 +865,18 @@ class VyOSClient:
     LOG_CATEGORIES = (
         "kernel", "firewall", "nat", "authorization", "https", "openvpn",
         "vpn", "wireguard", "lldp", "snmp", "vrrp", "conntrack-sync",
-        "zebra", "cluster",
+        "zebra", "cluster", "haproxy", "certbot",
     )
 
     _SYSLOG_RE = re.compile(
         r"^(?P<ts>[A-Z][a-z]{2}\s+\d{1,2}\s\d{2}:\d{2}:\d{2})\s+"
         r"(?:(?P<host>\S+)\s+)?(?P<proc>\S+):\s*(?P<msg>.*)$"
     )
+    # certbot debug log: "2026-09-11 14:14:55,996:DEBUG:certbot._internal.main:msg"
+    _CERTBOT_RE = re.compile(
+        r"^(?P<ts>\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2}),\d+:(?P<lvl>[A-Z]+):(?P<proc>\S+?):(?P<msg>.*)$"
+    )
+    _CERTBOT_LEVELS = {"CRITICAL": "error", "ERROR": "error", "WARNING": "warning"}
     _SEVERITY_RULES = (
         ("error", re.compile(r"error|fail|crit|deny|denied|refused", re.I)),
         ("warning", re.compile(r"warn", re.I)),
@@ -506,7 +928,7 @@ class VyOSClient:
             raise
         entries: List[LogEntry] = []
         for line in (output or "").splitlines():
-            if not line.strip() or "no entries" in line.lower():
+            if not line.strip() or "no entries" in line.lower() or "does not exist" in line.lower():
                 continue
             m = self._SYSLOG_RE.match(line)
             msg = m.group("msg") if m else line
@@ -516,10 +938,19 @@ class VyOSClient:
                     severity = name
                     break
             host = m.group("host").rstrip(":") if m and m.group("host") else None
+            ts = m.group("ts") if m else ""
+            proc = m.group("proc") if m else None
+            if not m:
+                cb = self._CERTBOT_RE.match(line)
+                if cb:
+                    ts = cb.group("ts")
+                    proc = cb.group("proc")
+                    msg = cb.group("msg").strip() or msg
+                    severity = self._CERTBOT_LEVELS.get(cb.group("lvl"), "info")
             entries.append(LogEntry(
-                timestamp=m.group("ts") if m else "",
+                timestamp=ts,
                 host=host,
-                process=m.group("proc") if m else None,
+                process=proc,
                 message=msg,
                 severity=severity,
                 raw=line,
@@ -527,4 +958,18 @@ class VyOSClient:
         return entries
 
 
-vyos_client = VyOSClient()
+class _ClientProxy:
+    """Forwards attribute access to the currently connected device's client.
+
+    Keeps the historical `vyos_client.get_...()` call sites working while the
+    actual client is owned by the connection manager (multi-device support).
+    """
+    def __getattr__(self, item):
+        from app.services.connections import connection_manager
+        client = connection_manager.client
+        if client is None:
+            raise VyOSError("Not connected to any VyOS device — log in first")
+        return getattr(client, item)
+
+
+vyos_client = _ClientProxy()

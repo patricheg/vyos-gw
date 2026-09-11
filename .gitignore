@@ -10,3 +10,4 @@ frontend/dist/
 # Logs and local config
 *.log
 .env
+backend/connections.json

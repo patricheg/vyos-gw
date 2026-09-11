@@ -2,7 +2,7 @@ from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     # VyOS HTTP API (service https api rest)
-    vyos_api_url: str = "https://10.11.12.4"
+    vyos_api_url: str = "https://10.11.12.4:8443"
     vyos_api_key: str = "11-future"
     vyos_api_verify_tls: bool = False  # lab uses self-signed cert
     vyos_api_timeout: int = 30

@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { Interface, FirewallRuleset, FirewallRule, LogEntry, SystemConfig, SystemResources, FirewallLogEntry, ServiceInfo, NatRule } from '../types';
+import type { Interface, FirewallRuleset, FirewallRule, LogEntry, SystemConfig, SystemResources, FirewallLogEntry, ServiceInfo, NatRule, HaproxyConfig, HaproxyService, HaproxyBackend, HaproxyGlobals, PkiConfig, PkiAcmeCreate, RouteEntry, StaticRoute, AddressGroup, ConnectionStatus, SavedDevice, ConnectResult, SshSetupResult } from '../types';
 
 const api = axios.create({
   baseURL: '/api',
@@ -25,6 +25,14 @@ export const updateRule = (chain: string, number: number, rule: FirewallRule) =>
 export const reorderChain = (chain: string, orderedNumbers: number[]) =>
   api.post(`/firewall/chains/${chain}/reorder`, orderedNumbers).then(r => r.data);
 
+export const getAddressGroups = () => api.get<AddressGroup[]>('/firewall/groups').then(r => r.data);
+export const addAddressGroup = (group: AddressGroup) =>
+  api.post('/firewall/groups', group).then(r => r.data);
+export const updateAddressGroup = (name: string, group: AddressGroup) =>
+  api.put(`/firewall/groups/${name}`, group).then(r => r.data);
+export const deleteAddressGroup = (name: string) =>
+  api.delete(`/firewall/groups/${name}`).then(r => r.data);
+
 // Logs
 export interface LogQuery {
   source?: string;
@@ -39,6 +47,26 @@ export const getLogs = (params: LogQuery) =>
 export const getSystem = () => api.get<SystemConfig>('/system/').then(r => r.data);
 export const updateSystem = (data: SystemConfig) => api.put('/system/', data).then(r => r.data);
 export const getSystemResources = () => api.get<SystemResources>('/system/resources').then(r => r.data);
+export const saveSystemConfig = () => api.post<{ status: string; detail: string }>('/system/save').then(r => r.data);
+export const downloadBackup = async () => {
+  const r = await api.get('/system/backup', { responseType: 'blob' });
+  const dispo = String(r.headers['content-disposition'] || '');
+  const m = dispo.match(/filename="?([^";]+)"?/);
+  const url = URL.createObjectURL(r.data);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = m ? m[1] : 'vyos-backup.txt';
+  a.click();
+  URL.revokeObjectURL(url);
+};
+export const restoreBackup = (file: File) => {
+  const form = new FormData();
+  form.append('file', file);
+  return api.post<{ status: string; commands: number; detail: string }>('/system/restore', form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 300000,
+  }).then(r => r.data);
+};
 
 // Firewall logs (parsed netfilter entries)
 export interface FirewallLogQuery {
@@ -64,6 +92,57 @@ export const updateNatRule = (number: number, rule: NatRule) =>
   api.put(`/nat/destination/rules/${number}`, rule).then(r => r.data);
 export const deleteNatRule = (number: number) =>
   api.delete(`/nat/destination/rules/${number}`).then(r => r.data);
+export const toggleNatRule = (number: number, disabled: boolean) =>
+  api.put(`/nat/destination/rules/${number}/disabled`, { disabled }).then(r => r.data);
+
+export const getRoutingTable = () => api.get<RouteEntry[]>('/routes/table').then(r => r.data);
+export const getStaticRoutes = () => api.get<StaticRoute[]>('/routes/static').then(r => r.data);
+export const addStaticRoute = (route: StaticRoute) =>
+  api.post('/routes/static', route).then(r => r.data);
+export const updateStaticRoute = (prefix: string, route: StaticRoute) =>
+  api.put(`/routes/static/${prefix}`, route).then(r => r.data);
+export const deleteStaticRoute = (prefix: string) =>
+  api.delete(`/routes/static/${prefix}`).then(r => r.data);
+export const toggleStaticRoute = (prefix: string, disabled: boolean) =>
+  api.put(`/routes/static/${prefix}/disabled`, { disabled }).then(r => r.data);
+
+// HAProxy (load-balancing haproxy)
+export const getHaproxy = () => api.get<HaproxyConfig>('/haproxy').then(r => r.data);
+export const addHaproxyService = (svc: HaproxyService) =>
+  api.post('/haproxy/services', svc).then(r => r.data);
+export const updateHaproxyService = (name: string, svc: HaproxyService) =>
+  api.put(`/haproxy/services/${name}`, svc).then(r => r.data);
+export const deleteHaproxyService = (name: string) =>
+  api.delete(`/haproxy/services/${name}`).then(r => r.data);
+export const addHaproxyBackend = (be: HaproxyBackend) =>
+  api.post('/haproxy/backends', be).then(r => r.data);
+export const updateHaproxyBackend = (name: string, be: HaproxyBackend) =>
+  api.put(`/haproxy/backends/${name}`, be).then(r => r.data);
+export const deleteHaproxyBackend = (name: string) =>
+  api.delete(`/haproxy/backends/${name}`).then(r => r.data);
+export const updateHaproxyGlobals = (data: HaproxyGlobals) =>
+  api.put('/haproxy/globals', data).then(r => r.data);
+
+// PKI (certificates)
+export const getPki = () => api.get<PkiConfig>('/pki').then(r => r.data);
+export const importPkiCertificate = (data: { name: string; certificate: string; private_key?: string | null; description?: string | null }) =>
+  api.post('/pki/certificates', data).then(r => r.data);
+export const deletePkiCertificate = (name: string) =>
+  api.delete(`/pki/certificates/${name}`).then(r => r.data);
+export const exportPkiCertificate = (name: string, includeKey: boolean) =>
+  api.get<string>(`/pki/certificates/${name}/export`, { params: { include_key: includeKey }, responseType: 'text' }).then(r => r.data);
+export const getPkiCertificateText = (name: string) =>
+  api.get<string>(`/pki/certificates/${name}/text`, { responseType: 'text' }).then(r => r.data);
+export const importPkiCa = (data: { name: string; certificate: string; description?: string | null }) =>
+  api.post('/pki/ca', data).then(r => r.data);
+export const deletePkiCa = (name: string) =>
+  api.delete(`/pki/ca/${name}`).then(r => r.data);
+export const exportPkiCa = (name: string) =>
+  api.get<string>(`/pki/ca/${name}/export`, { responseType: 'text' }).then(r => r.data);
+export const createAcmeCertificate = (data: PkiAcmeCreate) =>
+  api.post('/pki/acme', data).then(r => r.data);
+export const renewAcmeCertificates = () =>
+  api.post<{ status: string; output: string }>('/pki/renew').then(r => r.data);
 
 // Staging API
 export interface StagedChange {
@@ -77,3 +156,12 @@ export const getStaged = () => api.get<StagedChange[]>('/staged/').then(r => r.d
 export const commitStaged = () => api.post('/staged/commit').then(r => r.data);
 export const discardStaged = () => api.delete('/staged/').then(r => r.data);
 export const removeStaged = (id: string) => api.delete(`/staged/${id}`).then(r => r.data);
+
+export const getConnectionStatus = () => api.get<ConnectionStatus>('/connection/status').then(r => r.data);
+export const getSavedDevices = () => api.get<SavedDevice[]>('/connection/devices').then(r => r.data);
+export const connectDevice = (data: { host?: string; port?: number; api_key?: string; device_id?: string; label?: string; save?: boolean }) =>
+  api.post<ConnectResult>('/connection/connect', data).then(r => r.data);
+export const setupDeviceViaSsh = (data: { host: string; ssh_user: string; ssh_password: string; api_port?: number; label?: string }) =>
+  api.post<SshSetupResult>('/connection/setup-ssh', data).then(r => r.data);
+export const disconnectDevice = () => api.post('/connection/disconnect').then(r => r.data);
+export const deleteSavedDevice = (id: string) => api.delete(`/connection/devices/${id}`).then(r => r.data);
