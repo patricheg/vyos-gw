@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
 import {
-  getHaproxy,
+  getHaproxy, getHaproxyStatus, provisionHaproxy, migrateHaproxy,
   addHaproxyService, updateHaproxyService, deleteHaproxyService,
   addHaproxyBackend, updateHaproxyBackend, deleteHaproxyBackend,
   updateHaproxyGlobals,
-  getPki, getStaged,
+  getPki,
 } from '../api/client';
+import type { HaproxyStatus } from '../api/client';
 import type { HaproxyConfig, HaproxyService, HaproxyBackend, HaproxyServer, HaproxyServiceRule } from '../types';
 
 const inputCls = 'w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded focus:outline-none focus:border-blue-500';
@@ -79,6 +80,7 @@ export default function HaproxyPage() {
   const [caNames, setCaNames] = useState<string[]>([]);
   const [stagedBackends, setStagedBackends] = useState<string[]>([]);
   const [expandedSvcs, setExpandedSvcs] = useState<Set<string>>(new Set());
+  const [status, setStatus] = useState<HaproxyStatus | null>(null);
 
   const toggleSvc = (name: string) => {
     setExpandedSvcs(prev => {
@@ -91,6 +93,7 @@ export default function HaproxyPage() {
   const load = () => {
     setLoading(true);
     setErr('');
+    getHaproxyStatus().then(setStatus).catch(() => setStatus(null));
     getHaproxy()
       .then(c => {
         setCfg(c);
@@ -100,24 +103,8 @@ export default function HaproxyPage() {
           timeout_connect: c.timeout_connect?.toString() ?? '',
           timeout_server: c.timeout_server?.toString() ?? '',
         });
-        // backends that exist only as pending staged changes — selectable in the service form
-        getStaged()
-          .then(staged => {
-            const created = new Set<string>();
-            const deleted = new Set<string>();
-            let wiped = false;
-            for (const ch of staged) {
-              if (ch.command === 'delete load-balancing haproxy') wiped = true;
-              const add = ch.command.match(/^set load-balancing haproxy backend (\S+)\s/);
-              if (add) created.add(add[1]);
-              const del = ch.command.match(/^delete load-balancing haproxy backend (\S+)$/);
-              if (del) deleted.add(del[1]);
-            }
-            const names = new Set([...created].filter(n => !deleted.has(n)));
-            if (!wiped) c.backends.forEach(b => { if (!deleted.has(b.name)) names.add(b.name); });
-            setStagedBackends([...names].sort());
-          })
-          .catch(() => setStagedBackends(c.backends.map(b => b.name)));
+        // the model already includes staged (uncommitted) changes
+        setStagedBackends(c.backends.map(b => b.name));
       })
       .catch(e => setErr('Load error: ' + e.message))
       .finally(() => setLoading(false));
@@ -128,6 +115,36 @@ export default function HaproxyPage() {
         setCaNames(pki.ca_certificates.map(c => c.name));
       })
       .catch(() => {});
+  };
+
+  const handleProvision = async () => {
+    if (!confirm('Pull the haproxy container image and stage the container config? (may take a few minutes)')) return;
+    setWorking('provision');
+    setErr(''); setMsg('');
+    try {
+      await provisionHaproxy();
+      setMsg('Container staged — review and commit the pending changes');
+      load();
+    } catch (e: any) {
+      setErr('Provision failed: ' + (e.response?.data?.detail || e.message));
+    } finally {
+      setWorking(null);
+    }
+  };
+
+  const handleMigrate = async () => {
+    if (!confirm('Convert the built-in HAProxy config into the container model and stage removal of the built-in config? Commit afterwards to apply.')) return;
+    setWorking('migrate');
+    setErr(''); setMsg('');
+    try {
+      await migrateHaproxy();
+      setMsg('Migration staged — review and commit the pending changes');
+      load();
+    } catch (e: any) {
+      setErr('Migration failed: ' + (e.response?.data?.detail || e.message));
+    } finally {
+      setWorking(null);
+    }
   };
 
   useEffect(() => { load(); }, []);
@@ -417,6 +434,40 @@ export default function HaproxyPage() {
 
       {err && <div className="mb-4 p-3 bg-red-900/50 rounded border border-red-700 text-sm text-red-200">{err}</div>}
       {msg && <div className="mb-4 p-3 bg-green-900/50 rounded border border-green-700 text-sm text-green-200">{msg}</div>}
+
+      {/* Container status / provisioning banner */}
+      {status && (
+        <div className={`mb-4 p-3 rounded border text-sm flex flex-wrap items-center gap-x-4 gap-y-2 ${
+          status.provisioned
+            ? 'bg-gray-800/80 border-gray-700 text-gray-300'
+            : 'bg-blue-900/30 border-blue-700 text-blue-200'
+        }`}>
+          <span>
+            Container engine:{' '}
+            <strong className="text-white">
+              {status.provisioned
+                ? status.running === true ? 'running' : status.running === false ? 'stopped' : 'provisioned'
+                : 'not provisioned'}
+            </strong>
+          </span>
+          {status.builtin_active && (
+            <span className="text-yellow-300">built-in HAProxy config still present</span>
+          )}
+          {!status.provisioned && (
+            <button onClick={handleProvision} disabled={working !== null} className="px-3 py-1 bg-blue-600 rounded hover:bg-blue-500 text-white text-xs font-medium disabled:opacity-50">
+              {isWorking('provision') ? 'Pulling image…' : 'Provision container'}
+            </button>
+          )}
+          {status.builtin_active && (
+            <button onClick={handleMigrate} disabled={working !== null} className="px-3 py-1 bg-yellow-700 rounded hover:bg-yellow-600 text-white text-xs font-medium disabled:opacity-50">
+              {isWorking('migrate') ? 'Migrating…' : 'Migrate built-in config → container'}
+            </button>
+          )}
+          {!status.provisioned && !status.builtin_active && (
+            <span className="text-xs text-gray-400">Provision the container to enable HAProxy management.</span>
+          )}
+        </div>
+      )}
 
       {/* Global settings modal */}
       {showGlobals && (

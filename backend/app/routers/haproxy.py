@@ -4,31 +4,10 @@ import re
 from fastapi import APIRouter, HTTPException
 
 from app.models import HaproxyConfig, HaproxyService, HaproxyBackend, HaproxyGlobals
-from app.services.vyos_client import vyos_client
-from app.services.staging import staging_area
+from app.services import haproxy_container
+from app.services.vyos_client import VyOSError
 
 router = APIRouter(prefix="/api/haproxy", tags=["haproxy"])
-
-_BASE = "load-balancing haproxy"
-
-
-def _effective_names(kind: str, live_names) -> set:
-    """Names that will exist after the staged changes commit: live + staged-set − staged-delete."""
-    names = set(live_names)
-    set_prefix = f"set {_BASE} {kind} "
-    del_prefix = f"delete {_BASE} {kind} "
-    for ch in staging_area.list():
-        cmd = ch.command
-        if cmd.startswith(del_prefix):
-            rest = cmd[len(del_prefix):]
-            # a bare `delete ... <kind> <name>` (no deeper path) removes the whole node
-            if " " not in rest:
-                names.discard(rest)
-        elif cmd.startswith(set_prefix):
-            rest = cmd[len(set_prefix):]
-            if " " in rest:
-                names.add(rest.split(" ", 1)[0])
-    return names
 
 
 def _validate_service(svc: HaproxyService):
@@ -77,158 +56,119 @@ def _validate_backend(be: HaproxyBackend):
             )
 
 
-def _stage_service_commands(svc: HaproxyService):
-    base = f"set {_BASE} service {svc.name}"
-    if svc.description:
-        staging_area.add(f"{base} description '{svc.description}'", f"HAProxy service {svc.name} description", "haproxy")
-    if svc.mode:
-        staging_area.add(f"{base} mode {svc.mode}", f"HAProxy service {svc.name} mode", "haproxy")
-    staging_area.add(f"{base} port '{svc.port}'", f"HAProxy service {svc.name} port {svc.port}", "haproxy")
-    for addr in svc.listen_addresses:
-        staging_area.add(f"{base} listen-address '{addr}'", f"HAProxy service {svc.name} listen {addr}", "haproxy")
-    for be in svc.backends:
-        staging_area.add(f"{base} backend '{be}'", f"HAProxy service {svc.name} -> backend {be}", "haproxy")
-    if svc.redirect_http_to_https:
-        staging_area.add(f"{base} redirect-http-to-https", f"HAProxy service {svc.name} HTTP->HTTPS redirect", "haproxy")
-    if svc.ssl_certificate:
-        staging_area.add(f"{base} ssl certificate '{svc.ssl_certificate}'", f"HAProxy service {svc.name} TLS certificate", "haproxy")
-    if svc.logging_facility:
-        staging_area.add(f"{base} logging facility '{svc.logging_facility}'", f"HAProxy service {svc.name} logging", "haproxy")
-    for r in sorted(svc.rules, key=lambda x: x.number):
-        rbase = f"{base} rule {r.number}"
-        if r.domain_name:
-            staging_area.add(f"{rbase} domain-name '{r.domain_name}'", f"HAProxy {svc.name} rule {r.number} domain {r.domain_name}", "haproxy")
-            if r.wildcard_domain:
-                staging_area.add(f"{rbase} wildcard-domain", f"HAProxy {svc.name} rule {r.number} wildcard domain", "haproxy")
-        if r.url_path and r.url_path_match:
-            staging_area.add(f"{rbase} url-path {r.url_path_match} '{r.url_path}'", f"HAProxy {svc.name} rule {r.number} path {r.url_path_match} {r.url_path}", "haproxy")
-        if r.backend:
-            staging_area.add(f"{rbase} set backend '{r.backend}'", f"HAProxy {svc.name} rule {r.number} -> backend {r.backend}", "haproxy")
-        if r.redirect_location:
-            staging_area.add(f"{rbase} set redirect-location '{r.redirect_location}'", f"HAProxy {svc.name} rule {r.number} redirect {r.redirect_location}", "haproxy")
+def _engine_call(fn, *args):
+    try:
+        return fn(*args)
+    except VyOSError as e:
+        raise HTTPException(status_code=502, detail=str(e))
 
 
-def _stage_backend_commands(be: HaproxyBackend):
-    base = f"set {_BASE} backend {be.name}"
-    if be.description:
-        staging_area.add(f"{base} description '{be.description}'", f"HAProxy backend {be.name} description", "haproxy")
-    if be.mode:
-        staging_area.add(f"{base} mode {be.mode}", f"HAProxy backend {be.name} mode", "haproxy")
-    if be.balance:
-        staging_area.add(f"{base} balance {be.balance}", f"HAProxy backend {be.name} balance {be.balance}", "haproxy")
-    if be.logging_facility:
-        staging_area.add(f"{base} logging facility '{be.logging_facility}'", f"HAProxy backend {be.name} logging", "haproxy")
-    if be.ssl_no_verify:
-        staging_area.add(f"{base} ssl no-verify", f"HAProxy backend {be.name} TLS to servers (no verify)", "haproxy")
-    if be.ssl_ca_certificate:
-        staging_area.add(f"{base} ssl ca-certificate '{be.ssl_ca_certificate}'", f"HAProxy backend {be.name} TLS to servers (CA {be.ssl_ca_certificate})", "haproxy")
-    for srv in be.servers:
-        sbase = f"{base} server {srv.name}"
-        staging_area.add(f"{sbase} address '{srv.address}'", f"HAProxy server {be.name}/{srv.name} address", "haproxy")
-        staging_area.add(f"{sbase} port '{srv.port}'", f"HAProxy server {be.name}/{srv.name} port {srv.port}", "haproxy")
-        if srv.check:
-            staging_area.add(f"{sbase} check", f"HAProxy server {be.name}/{srv.name} health check", "haproxy")
-            if srv.check_port:
-                staging_area.add(f"{sbase} check port '{srv.check_port}'", f"HAProxy server {be.name}/{srv.name} check port", "haproxy")
-        if srv.backup:
-            staging_area.add(f"{sbase} backup", f"HAProxy server {be.name}/{srv.name} backup", "haproxy")
-        if srv.send_proxy:
-            staging_area.add(f"{sbase} send-proxy", f"HAProxy server {be.name}/{srv.name} PROXY v1", "haproxy")
-        if srv.send_proxy_v2:
-            staging_area.add(f"{sbase} send-proxy-v2", f"HAProxy server {be.name}/{srv.name} PROXY v2", "haproxy")
+def _apply_or_502(model: HaproxyConfig):
+    try:
+        haproxy_container.apply_model(model)
+    except VyOSError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return {"status": "staged", "changes": 1}
+
+
+@router.get("/status")
+async def get_status():
+    return await asyncio.to_thread(_engine_call, haproxy_container.get_status)
+
+
+@router.post("/provision")
+async def provision():
+    """Install SSH key + entrypoint on the device, pull the haproxy image and
+    stage the container config."""
+    await asyncio.to_thread(_engine_call, haproxy_container.provision_files)
+    await asyncio.to_thread(_engine_call, haproxy_container.pull_image)
+    model = await asyncio.to_thread(_engine_call, haproxy_container.get_model)
+    return _apply_or_502(model)
+
+
+@router.post("/migrate")
+async def migrate():
+    """Convert the built-in haproxy config into the container model and stage
+    removal of the built-in config."""
+    return await asyncio.to_thread(_engine_call, haproxy_container.migrate_from_builtin)
+
+
+@router.delete("/container")
+async def remove_container():
+    await asyncio.to_thread(_engine_call, haproxy_container.stage_container_removal)
+    return {"status": "staged", "changes": 1}
 
 
 @router.get("", response_model=HaproxyConfig)
 async def get_haproxy():
-    return await asyncio.to_thread(vyos_client.get_haproxy)
+    return await asyncio.to_thread(_engine_call, haproxy_container.get_model)
 
 
 @router.post("/services")
 async def add_service(svc: HaproxyService):
     _validate_service(svc)
-    cfg = await asyncio.to_thread(vyos_client.get_haproxy)
-    if svc.name in _effective_names("service", (s.name for s in cfg.services)):
+    model = await asyncio.to_thread(_engine_call, haproxy_container.get_model)
+    if any(s.name == svc.name for s in model.services):
         raise HTTPException(status_code=409, detail=f"Service {svc.name!r} already exists")
-    _stage_service_commands(svc)
-    return {"status": "staged", "changes": 1}
+    if svc.backends:
+        known = {b.name for b in model.backends}
+        missing = [b for b in svc.backends if b not in known]
+        if missing:
+            raise HTTPException(status_code=400, detail=f"Unknown backend(s): {', '.join(missing)}")
+    model.services.append(svc)
+    return _apply_or_502(model)
 
 
 @router.put("/services/{name}")
 async def update_service(name: str, svc: HaproxyService):
     _validate_service(svc)
-    staging_area.add(f"delete {_BASE} service {name}", f"Update: remove old HAProxy service {name}", "haproxy")
-    _stage_service_commands(svc)
-    return {"status": "staged", "changes": 1}
+    model = await asyncio.to_thread(_engine_call, haproxy_container.get_model)
+    model.services = [s for s in model.services if s.name != name]
+    model.services.append(svc)
+    return _apply_or_502(model)
 
 
 @router.delete("/services/{name}")
 async def delete_service(name: str):
-    # VyOS verify(): haproxy must have BOTH a service and a backend, or nothing.
-    # Removing the last link of either side means dropping the whole haproxy node.
-    cfg = await asyncio.to_thread(vyos_client.get_haproxy)
-    remaining = [s for s in cfg.services if s.name != name]
-    if not remaining:
-        staging_area.add(
-            f"delete {_BASE}",
-            f"Delete HAProxy service {name} (last one — whole haproxy config removed)",
-            "haproxy",
-        )
-    else:
-        staging_area.add(f"delete {_BASE} service {name}", f"Delete HAProxy service {name}", "haproxy")
-    return {"status": "staged", "changes": 1}
+    model = await asyncio.to_thread(_engine_call, haproxy_container.get_model)
+    model.services = [s for s in model.services if s.name != name]
+    return _apply_or_502(model)
 
 
 @router.post("/backends")
 async def add_backend(be: HaproxyBackend):
     _validate_backend(be)
-    cfg = await asyncio.to_thread(vyos_client.get_haproxy)
-    if be.name in _effective_names("backend", (b.name for b in cfg.backends)):
+    model = await asyncio.to_thread(_engine_call, haproxy_container.get_model)
+    if any(b.name == be.name for b in model.backends):
         raise HTTPException(status_code=409, detail=f"Backend {be.name!r} already exists")
-    _stage_backend_commands(be)
-    return {"status": "staged", "changes": 1}
+    model.backends.append(be)
+    return _apply_or_502(model)
 
 
 @router.put("/backends/{name}")
 async def update_backend(name: str, be: HaproxyBackend):
     _validate_backend(be)
-    staging_area.add(f"delete {_BASE} backend {name}", f"Update: remove old HAProxy backend {name}", "haproxy")
-    _stage_backend_commands(be)
-    return {"status": "staged", "changes": 1}
+    model = await asyncio.to_thread(_engine_call, haproxy_container.get_model)
+    model.backends = [b for b in model.backends if b.name != name]
+    model.backends.append(be)
+    return _apply_or_502(model)
 
 
 @router.delete("/backends/{name}")
 async def delete_backend(name: str):
-    cfg = await asyncio.to_thread(vyos_client.get_haproxy)
-    remaining = [b for b in cfg.backends if b.name != name]
-    if not remaining:
-        staging_area.add(
-            f"delete {_BASE}",
-            f"Delete HAProxy backend {name} (last one — whole haproxy config removed)",
-            "haproxy",
-        )
-    else:
-        staging_area.add(f"delete {_BASE} backend {name}", f"Delete HAProxy backend {name}", "haproxy")
-    return {"status": "staged", "changes": 1}
-
-
-class HaproxyGlobalsUpdate(HaproxyGlobals):
-    pass
+    model = await asyncio.to_thread(_engine_call, haproxy_container.get_model)
+    model.backends = [b for b in model.backends if b.name != name]
+    # services must not reference a removed backend
+    for svc in model.services:
+        svc.backends = [b for b in svc.backends if b != name]
+    return _apply_or_502(model)
 
 
 @router.put("/globals")
-async def update_globals(data: HaproxyGlobalsUpdate):
-    current = await asyncio.to_thread(vyos_client.get_haproxy)
-    pairs = [
-        ("global-parameters max-connections", current.max_connections, data.max_connections, "max connections"),
-        ("timeout client", current.timeout_client, data.timeout_client, "client timeout"),
-        ("timeout connect", current.timeout_connect, data.timeout_connect, "connect timeout"),
-        ("timeout server", current.timeout_server, data.timeout_server, "server timeout"),
-    ]
-    for path, old, new, label in pairs:
-        if new == old:
-            continue
-        if new is None:
-            staging_area.add(f"delete {_BASE} {path}", f"HAProxy: reset {label}", "haproxy")
-        else:
-            staging_area.add(f"set {_BASE} {path} '{new}'", f"HAProxy: {label} = {new}", "haproxy")
-    return {"status": "staged", "changes": 1}
+async def update_globals(data: HaproxyGlobals):
+    model = await asyncio.to_thread(_engine_call, haproxy_container.get_model)
+    model.max_connections = data.max_connections
+    model.timeout_client = data.timeout_client
+    model.timeout_connect = data.timeout_connect
+    model.timeout_server = data.timeout_server
+    return _apply_or_502(model)

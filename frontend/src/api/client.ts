@@ -106,8 +106,19 @@ export const deleteStaticRoute = (prefix: string) =>
 export const toggleStaticRoute = (prefix: string, disabled: boolean) =>
   api.put(`/routes/static/${prefix}/disabled`, { disabled }).then(r => r.data);
 
-// HAProxy (load-balancing haproxy)
+// HAProxy (container-based)
 export const getHaproxy = () => api.get<HaproxyConfig>('/haproxy').then(r => r.data);
+export interface HaproxyStatus {
+  provisioned: boolean;
+  builtin_active: boolean;
+  image: string;
+  image_present: boolean | null;
+  running: boolean | null;
+}
+export const getHaproxyStatus = () => api.get<HaproxyStatus>('/haproxy/status').then(r => r.data);
+export const provisionHaproxy = () =>
+  api.post('/haproxy/provision', null, { timeout: 900000 }).then(r => r.data);
+export const migrateHaproxy = () => api.post('/haproxy/migrate').then(r => r.data);
 export const addHaproxyService = (svc: HaproxyService) =>
   api.post('/haproxy/services', svc).then(r => r.data);
 export const updateHaproxyService = (name: string, svc: HaproxyService) =>

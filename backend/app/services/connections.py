@@ -61,6 +61,11 @@ class ConnectionManager:
     def client(self) -> Optional[VyOSClient]:
         return self._client
 
+    def active_device(self) -> Dict[str, Any]:
+        if not self._device:
+            raise VyOSError("Not connected to any VyOS device")
+        return self._device
+
     def status(self) -> Dict[str, Any]:
         d = self._device
         return {
