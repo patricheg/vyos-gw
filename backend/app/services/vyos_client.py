@@ -665,6 +665,14 @@ class VyOSClient:
                     details = self._decode_cert_pem(pem)
                     for k, v in details.items():
                         setattr(entry, k, v)
+            elif entry.acme:
+                # ACME certs live under /config/auth/letsencrypt, not in pki
+                pem = _read_acme_fullchain(name)
+                if pem:
+                    entry.has_private_key = True
+                    details = self._decode_cert_pem(pem)
+                    for k, v in details.items():
+                        setattr(entry, k, v)
             certificates.append(entry)
 
         ca_certificates = []
@@ -961,6 +969,16 @@ class VyOSClient:
                 raw=line,
             ))
         return entries
+
+
+def _read_acme_fullchain(name: str) -> Optional[str]:
+    """Read an issued ACME cert from the letsencrypt dir via SSH; None if absent."""
+    try:
+        from app.services import ssh_keys
+        pem = ssh_keys.read_remote_file(f"/config/auth/letsencrypt/live/{name}/fullchain.pem")
+        return pem if "BEGIN" in pem else None
+    except Exception:
+        return None
 
 
 class _ClientProxy:
