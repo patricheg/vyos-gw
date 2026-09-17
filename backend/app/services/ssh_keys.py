@@ -117,6 +117,15 @@ def _exec(ssh: paramiko.SSHClient, cmd: str, input_text: str = "", timeout: floa
     return stdout.read().decode(errors="ignore")
 
 
+def read_remote_file(path: str) -> str:
+    """Read a root-owned file from the device (sudo cat)."""
+    ssh = ssh_connect()
+    try:
+        return _exec(ssh, f"sudo cat {path}")
+    finally:
+        ssh.close()
+
+
 def write_remote_file(path: str, content: str, mode: int = 0o644) -> None:
     """Write a file on the device. Uses sudo — the login user is in the sudo
     group on stock VyOS, and /config is root-owned."""

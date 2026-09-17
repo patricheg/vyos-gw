@@ -33,7 +33,9 @@ ENV_CFG = "HAPROXY_CFG"
 ENV_CERT_PREFIX = "HAPROXY_CERT_"
 _ACME_VOLUME_SOURCE = "/config/auth/letsencrypt"
 _ACME_VOLUME_DEST = "/acme"
-_ACME_BACKEND_PORT = 65080  # must match vyos.defaults internal_ports['certbot_haproxy']
+# Without built-in haproxy (used_by is never set) certbot standalone binds
+# 127.0.0.1:80 directly — the container must forward ACME challenges there.
+_ACME_BACKEND_PORT = 80
 _FILES_DIR_HOST = "/config/auth/haproxy"   # persistent + writable by vyattacfg group
 _ENTRYPOINT_HOST = f"{_FILES_DIR_HOST}/entrypoint.sh"
 _ENTRYPOINT_CTR = "/entrypoint/entrypoint.sh"
@@ -196,8 +198,8 @@ def pull_image() -> str:
 
 
 def _pem_ref(name: str, acme: bool) -> str:
-    # ACME certs keep their on-disk directory name; PKI certs use env-safe names
-    return f"{_CTR_WORKDIR}/certs/{name if acme else _env_safe(name)}.pem"
+    # all certs (PKI and ACME) arrive via HAPROXY_CERT_* env vars
+    return f"{_CTR_WORKDIR}/certs/{_env_safe(name)}.pem"
 
 
 def render_cfg(model: HaproxyConfig, acme_certs: Dict[str, bool]) -> str:
@@ -225,7 +227,9 @@ def render_cfg(model: HaproxyConfig, acme_certs: Dict[str, bool]) -> str:
         "",
     ]
 
-    has_acme = any(acme_certs.get(s.ssl_certificate or "") for s in model.services)
+    # ACME passthrough is rendered whenever there is a plain-HTTP frontend:
+    # a certificate must be issuable before any service references it.
+    has_http_frontend = any((s.mode or "http") == "http" and not s.ssl_certificate for s in model.services)
 
     for svc in model.services:
         mode = svc.mode or "http"
@@ -241,11 +245,15 @@ def render_cfg(model: HaproxyConfig, acme_certs: Dict[str, bool]) -> str:
             L.append(f"    log /dev/log {svc.logging_facility} info")
         if mode == "http":
             L.append("    option httplog")
-            if svc.redirect_http_to_https:
-                L.append("    http-request redirect scheme https code 301 unless { ssl_fc }")
-            # ACME HTTP-01 passthrough to certbot (runs on the host)
-            if has_acme and not svc.ssl_certificate:
+            if not svc.ssl_certificate:
                 L.append("    acl acme_challenge path_beg /.well-known/acme-challenge/")
+            if svc.redirect_http_to_https:
+                if svc.ssl_certificate:
+                    L.append("    http-request redirect scheme https code 301 unless { ssl_fc }")
+                else:
+                    L.append("    http-request redirect scheme https code 301 if !{ ssl_fc } !acme_challenge")
+            # ACME HTTP-01 passthrough to certbot (runs on the host)
+            if has_http_frontend and not svc.ssl_certificate:
                 L.append("    use_backend acme-certbot if acme_challenge")
             for r in sorted(svc.rules, key=lambda x: x.number):
                 conds = []
@@ -270,7 +278,7 @@ def render_cfg(model: HaproxyConfig, acme_certs: Dict[str, bool]) -> str:
             L.append(f"    default_backend {svc.backends[0]}")
         L.append("")
 
-    if has_acme:
+    if has_http_frontend:
         L += [
             "backend acme-certbot",
             "    mode http",
@@ -311,6 +319,24 @@ def render_cfg(model: HaproxyConfig, acme_certs: Dict[str, bool]) -> str:
 # ─── Certificate collection ───────────────────────────────────────
 
 
+def _read_acme_pem(name: str) -> str:
+    """Read an issued ACME cert (fullchain+key) from the letsencrypt dir via SSH.
+
+    The volume is root:vyattacfg 700, so the unprivileged container cannot read
+    it directly — we ship the PEM through an env var like the PKI certs.
+    """
+    from app.services import ssh_keys
+    base = f"{_ACME_VOLUME_SOURCE}/live/{name}"
+    try:
+        fullchain = ssh_keys.read_remote_file(f"{base}/fullchain.pem")
+        privkey = ssh_keys.read_remote_file(f"{base}/privkey.pem")
+    except VyOSError as e:
+        raise VyOSError(
+            f"ACME certificate {name!r} is not issued yet (no files under {base}): {e}"
+        ) from e
+    return fullchain.rstrip() + "\n" + privkey.rstrip() + "\n"
+
+
 def _collect_cert_env(model: HaproxyConfig) -> Tuple[Dict[str, str], Dict[str, bool]]:
     """Build HAPROXY_CERT_* env values from VyOS PKI; return (env, acme_map)."""
     pki = vyos_client.get_pki()
@@ -326,8 +352,11 @@ def _collect_cert_env(model: HaproxyConfig) -> Tuple[Dict[str, str], Dict[str, b
 
     for svc in model.services:
         name = svc.ssl_certificate
-        if not name or acme_map.get(name):
-            continue  # ACME certs come from the mounted volume
+        if not name:
+            continue
+        if acme_map.get(name):
+            env[ENV_CERT_PREFIX + _env_safe(name)] = _read_acme_pem(name)
+            continue
         node = fetch(["pki", "certificate", name]) or {}
         cert_body = node.get("certificate")
         key_body = (node.get("private") or {}).get("key") if isinstance(node.get("private"), dict) else None

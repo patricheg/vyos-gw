@@ -71,7 +71,12 @@ class VyOSClient:
             return "No changes"
         ops = [self._cli_to_op(c) for c in commands]
         payload: Any = ops[0] if len(ops) == 1 else ops
-        self._post("/configure", payload)
+        # commits can trigger slow on-device work (e.g. certbot for ACME certs)
+        old_timeout, self.timeout = self.timeout, max(self.timeout, 300)
+        try:
+            self._post("/configure", payload)
+        finally:
+            self.timeout = old_timeout
         return f"Committed {len(ops)} operation(s) via API"
 
     def save_config(self) -> str:

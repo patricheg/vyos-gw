@@ -132,12 +132,36 @@ async def create_acme(data: PkiAcmeCreate):
         raise HTTPException(status_code=409, detail=f"Certificate {data.name!r} already exists")
 
     base = f"set {_BASE} certificate {data.name}"
+
+    from app.services import haproxy_container
+    container_haproxy = haproxy_container.is_provisioned()
+    if container_haproxy:
+        wildcard80 = [
+            s.name for s in haproxy_container.get_model().services
+            if s.port == 80 and not s.ssl_certificate and not s.listen_addresses
+        ]
+        if wildcard80:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"HAProxy service(s) {', '.join(wildcard80)} listen on *:80 — ACME issuance "
+                    "needs port 80 bound to specific external addresses so certbot can use "
+                    "127.0.0.1:80. Set listen addresses on the HTTP service first."
+                ),
+            )
+
     for domain in data.domains:
         staging_area.add(f"{base} acme domain-name '{domain.strip()}'", f"ACME {data.name} domain {domain.strip()}", "pki")
     staging_area.add(f"{base} acme email '{data.email}'", f"ACME {data.name} email", "pki")
     staging_area.add(f"{base} acme rsa-key-size '{data.rsa_key_size}'", f"ACME {data.name} key size", "pki")
-    if data.listen_address:
-        staging_area.add(f"{base} acme listen-address '{data.listen_address}'", f"ACME {data.name} listen address", "pki")
+    listen_address = data.listen_address
+    if not listen_address and container_haproxy:
+        # With the container-based haproxy, certbot binds 127.0.0.1:80 so the
+        # VyOS port-80 availability check probes loopback instead of the public
+        # address held by the container.
+        listen_address = "127.0.0.1"
+    if listen_address:
+        staging_area.add(f"{base} acme listen-address '{listen_address}'", f"ACME {data.name} listen address", "pki")
     if data.url:
         staging_area.add(f"{base} acme url '{data.url}'", f"ACME {data.name} directory URL", "pki")
     if data.description:
@@ -152,4 +176,9 @@ async def renew_acme():
         output = await asyncio.to_thread(vyos_client.renew_certbot)
     except VyOSError as e:
         raise HTTPException(status_code=502, detail=str(e))
+    # refreshed certs must reach the container: re-stage the model (new env
+    # values) so the next commit restarts haproxy with the renewed PEMs
+    from app.services import haproxy_container
+    if haproxy_container.is_provisioned():
+        await asyncio.to_thread(haproxy_container.apply_model, haproxy_container.get_model())
     return {"status": "ok", "output": output}
