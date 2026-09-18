@@ -24,6 +24,7 @@ const EMPTY_SERVICE: HaproxyService = {
   backends: [],
   redirect_http_to_https: false,
   ssl_certificate: null,
+  ssl_certificates: [],
   logging_facility: null,
   rules: [],
   geoip_mode: 'off',
@@ -181,6 +182,7 @@ export default function HaproxyPage() {
   const openEditSvc = (s: HaproxyService) => {
     setSvcForm({
       ...s,
+      ssl_certificates: s.ssl_certificates || [],
       geoip_mode: s.geoip_mode ?? 'off',
       geoip_countries: s.geoip_countries ?? [],
       rules: s.rules.map(r => ({ ...r, geoip_mode: r.geoip_mode ?? null, geoip_countries: r.geoip_countries ?? [] })),
@@ -195,6 +197,7 @@ export default function HaproxyPage() {
     ...svcForm,
     description: svcForm.description || null,
     ssl_certificate: svcForm.ssl_certificate || null,
+    ssl_certificates: svcForm.ssl_certificate ? svcForm.ssl_certificates : [],
     geoip_mode: svcForm.geoip_mode ?? 'off',
     listen_addresses: svcListen.split(',').map(a => a.trim()).filter(Boolean),
     rules: svcForm.rules.map(r => ({
@@ -596,6 +599,11 @@ export default function HaproxyPage() {
                       {(s.listen_addresses.length > 0 ? s.listen_addresses.join(', ') : '*')}:{s.port ?? '?'}
                     </span>
                     {s.ssl_certificate && <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-green-900 text-green-300" title={`TLS certificate: ${s.ssl_certificate}`}>TLS:{s.ssl_certificate}</span>}
+                    {s.ssl_certificates && s.ssl_certificates.length > 0 && (
+                      <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-green-900/60 text-green-300" title={`Additional SNI certificates: ${s.ssl_certificates.join(', ')}`}>
+                        +{s.ssl_certificates.length} certs
+                      </span>
+                    )}
                     {s.redirect_http_to_https && <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-purple-900 text-purple-300">→HTTPS</span>}
                     {s.logging_facility && <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-sky-900 text-sky-300">log:{s.logging_facility}</span>}
                     {s.geoip_mode && s.geoip_mode !== 'off' && (
@@ -878,7 +886,18 @@ export default function HaproxyPage() {
               </div>
               <div>
                 <label className="block text-sm text-gray-400 mb-1">TLS certificate</label>
-                <select value={svcForm.ssl_certificate || ''} onChange={e => setSvcForm({ ...svcForm, ssl_certificate: e.target.value || null })} className={inputCls}>
+                <select
+                  value={svcForm.ssl_certificate || ''}
+                  onChange={e => {
+                    const cert = e.target.value || null;
+                    setSvcForm({
+                      ...svcForm,
+                      ssl_certificate: cert,
+                      ssl_certificates: cert ? svcForm.ssl_certificates.filter(c => c !== cert) : [],
+                    });
+                  }}
+                  className={inputCls}
+                >
                   <option value="">none (plain HTTP)</option>
                   {certNames.map(n => <option key={n} value={n}>{n}</option>)}
                   {svcForm.ssl_certificate && !certNames.includes(svcForm.ssl_certificate) && (
@@ -886,6 +905,32 @@ export default function HaproxyPage() {
                   )}
                 </select>
                 {certNames.length === 0 && <p className="text-xs text-gray-500 mt-1">No certificates in PKI — add one on the Certificates page</p>}
+                {svcForm.ssl_certificate && (
+                  <div className="mt-3">
+                    <label className="block text-sm text-gray-400 mb-1">Additional certificates (SNI)</label>
+                    <div className="max-h-32 overflow-y-auto p-2 bg-gray-900 border border-gray-700 rounded space-y-1">
+                      {certNames.filter(n => n !== svcForm.ssl_certificate).length === 0 && (
+                        <span className="text-xs text-gray-500">No other certificates in PKI</span>
+                      )}
+                      {certNames.filter(n => n !== svcForm.ssl_certificate).map(n => (
+                        <label key={n} className="flex items-center gap-1.5 text-sm cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={svcForm.ssl_certificates.includes(n)}
+                            onChange={e => setSvcForm({
+                              ...svcForm,
+                              ssl_certificates: e.target.checked
+                                ? [...svcForm.ssl_certificates, n]
+                                : svcForm.ssl_certificates.filter(c => c !== n),
+                            })}
+                          />
+                          <span className="font-mono">{n}</span>
+                        </label>
+                      ))}
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">picked automatically by requested domain name (SNI); the primary certificate is the default</p>
+                  </div>
+                )}
               </div>
               <div>
                 <label className="block text-sm text-gray-400 mb-1">Logging facility</label>

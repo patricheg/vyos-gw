@@ -180,6 +180,7 @@ class HaproxyService(BaseModel):
     backends: List[str] = []           # backend members (multi-value node)
     redirect_http_to_https: bool = False
     ssl_certificate: Optional[str] = None
+    ssl_certificates: List[str] = []      # additional certs, chosen by SNI
     logging_facility: Optional[str] = None
     rules: List[HaproxyServiceRule] = []
     geoip_mode: Optional[Literal["off", "allow", "deny"]] = "off"

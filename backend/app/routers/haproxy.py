@@ -42,6 +42,10 @@ def _validate_service(svc: HaproxyService):
             )
     if svc.rules and svc.mode == "tcp":
         raise HTTPException(status_code=400, detail="Routing rules require HTTP mode (TCP mode cannot inspect URLs)")
+    if svc.ssl_certificates and not svc.ssl_certificate:
+        raise HTTPException(status_code=400, detail="Additional certificates require the primary SSL certificate")
+    if svc.ssl_certificate and svc.ssl_certificate in svc.ssl_certificates:
+        raise HTTPException(status_code=400, detail="Additional certificates duplicate the primary one")
     _validate_geoip(svc.geoip_mode, svc.geoip_countries, f"Service {svc.name!r}")
     for r in svc.rules:
         _validate_geoip(r.geoip_mode, r.geoip_countries, f"Rule {r.number}")

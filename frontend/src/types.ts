@@ -160,6 +160,7 @@ export interface HaproxyService {
   backends: string[];
   redirect_http_to_https: boolean;
   ssl_certificate: string | null;
+  ssl_certificates: string[];
   logging_facility: string | null;
   rules: HaproxyServiceRule[];
   geoip_mode: 'off' | 'allow' | 'deny' | null;

@@ -252,7 +252,11 @@ def render_cfg(model: HaproxyConfig, acme_certs: Dict[str, bool]) -> str:
         for addr in binds:
             bind = f"    bind {addr}:{svc.port}"
             if svc.ssl_certificate:
-                bind += f" ssl crt {_pem_ref(svc.ssl_certificate, acme_certs.get(svc.ssl_certificate, False))}"
+                # multiple crt entries: the first is the default, the rest are
+                # picked by SNI (HAProxy builds the SNI map automatically)
+                certs = [svc.ssl_certificate] + [c for c in svc.ssl_certificates if c != svc.ssl_certificate]
+                for crt in certs:
+                    bind += f" ssl crt {_pem_ref(crt, acme_certs.get(crt, False))}" if crt == certs[0] else f" crt {_pem_ref(crt, acme_certs.get(crt, False))}"
             L.append(bind)
         if svc.logging_facility and svc.logging_facility != facility:
             L.append(f"    log /dev/log {svc.logging_facility} info")
@@ -413,21 +417,21 @@ def _collect_cert_env(model: HaproxyConfig) -> Tuple[Dict[str, str], Dict[str, b
             return None
 
     for svc in model.services:
-        name = svc.ssl_certificate
-        if not name:
-            continue
-        if acme_map.get(name):
-            env[ENV_CERT_PREFIX + _env_safe(name)] = _read_acme_pem(name)
-            continue
-        node = fetch(["pki", "certificate", name]) or {}
-        cert_body = node.get("certificate")
-        key_body = (node.get("private") or {}).get("key") if isinstance(node.get("private"), dict) else None
-        if not cert_body or not key_body:
-            raise VyOSError(
-                f"Certificate {name!r} has no private key in VyOS PKI — import it or use an ACME certificate"
-            )
-        pem = _pem_wrap("CERTIFICATE", cert_body) + _pem_wrap("PRIVATE KEY", key_body)
-        env[ENV_CERT_PREFIX + _env_safe(name)] = pem
+        for name in [svc.ssl_certificate, *svc.ssl_certificates]:
+            if not name or ENV_CERT_PREFIX + _env_safe(name) in env:
+                continue
+            if acme_map.get(name):
+                env[ENV_CERT_PREFIX + _env_safe(name)] = _read_acme_pem(name)
+                continue
+            node = fetch(["pki", "certificate", name]) or {}
+            cert_body = node.get("certificate")
+            key_body = (node.get("private") or {}).get("key") if isinstance(node.get("private"), dict) else None
+            if not cert_body or not key_body:
+                raise VyOSError(
+                    f"Certificate {name!r} has no private key in VyOS PKI — import it or use an ACME certificate"
+                )
+            pem = _pem_wrap("CERTIFICATE", cert_body) + _pem_wrap("PRIVATE KEY", key_body)
+            env[ENV_CERT_PREFIX + _env_safe(name)] = pem
 
     for be in model.backends:
         ca = be.ssl_ca_certificate
