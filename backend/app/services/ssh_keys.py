@@ -140,3 +140,29 @@ def write_remote_file(path: str, content: str, mode: int = 0o644) -> None:
         _exec(ssh, f"sudo chmod {mode:o} {path}")
     finally:
         ssh.close()
+
+
+# ─── ACME certificate cache ───────────────────────────────────────
+# Reading /config/auth/letsencrypt over SSH races with sshd restarts after
+# commits. Certificates change only on renewal, so every successful read is
+# cached locally and reused when SSH is temporarily unreachable.
+
+_ACME_CACHE_DIR = os.path.join(_DATA_DIR, "acme_cache")
+
+
+def acme_cache_write(name: str, suffix: str, pem: str) -> None:
+    try:
+        os.makedirs(_ACME_CACHE_DIR, exist_ok=True)
+        with open(os.path.join(_ACME_CACHE_DIR, f"{name}.{suffix}.pem"), "w") as f:
+            f.write(pem)
+    except OSError:
+        pass
+
+
+def acme_cache_read(name: str, suffix: str) -> Optional[str]:
+    try:
+        with open(os.path.join(_ACME_CACHE_DIR, f"{name}.{suffix}.pem")) as f:
+            data = f.read()
+        return data if "BEGIN" in data else None
+    except OSError:
+        return None

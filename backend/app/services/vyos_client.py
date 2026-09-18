@@ -972,13 +972,18 @@ class VyOSClient:
 
 
 def _read_acme_fullchain(name: str) -> Optional[str]:
-    """Read an issued ACME cert from the letsencrypt dir via SSH; None if absent."""
+    """Read an issued ACME cert from the letsencrypt dir via SSH; None if absent.
+
+    Falls back to the local cache when sshd is bouncing after a commit."""
+    from app.services import ssh_keys
     try:
-        from app.services import ssh_keys
         pem = ssh_keys.read_remote_file(f"/config/auth/letsencrypt/live/{name}/fullchain.pem")
-        return pem if "BEGIN" in pem else None
-    except Exception:
+        if "BEGIN" in pem:
+            ssh_keys.acme_cache_write(name, "fullchain", pem)
+            return pem
         return None
+    except Exception:
+        return ssh_keys.acme_cache_read(name, "fullchain")
 
 
 # Single-device client, configured from settings (backend/app/config.py).

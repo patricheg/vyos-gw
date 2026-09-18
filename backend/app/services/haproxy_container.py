@@ -324,6 +324,8 @@ def _read_acme_pem(name: str) -> str:
 
     The volume is root:vyattacfg 700, so the unprivileged container cannot read
     it directly — we ship the PEM through an env var like the PKI certs.
+    sshd often bounces right after a commit, so a successful read is cached
+    locally and the cache is used when SSH is temporarily unreachable.
     """
     from app.services import ssh_keys
     base = f"{_ACME_VOLUME_SOURCE}/live/{name}"
@@ -335,11 +337,16 @@ def _read_acme_pem(name: str) -> str:
             raise VyOSError(
                 f"ACME certificate {name!r} is not issued yet (no files under {base})"
             ) from e
+        cached = ssh_keys.acme_cache_read(name, "combined")
+        if cached:
+            return cached
         raise VyOSError(
-            f"Cannot read ACME certificate {name!r} via SSH (the device may be "
-            f"restarting sshd after a commit — try again in a few seconds): {e}"
+            f"Cannot read ACME certificate {name!r} via SSH and no local cache "
+            f"exists yet — retry in a few seconds: {e}"
         ) from e
-    return fullchain.rstrip() + "\n" + privkey.rstrip() + "\n"
+    pem = fullchain.rstrip() + "\n" + privkey.rstrip() + "\n"
+    ssh_keys.acme_cache_write(name, "combined", pem)
+    return pem
 
 
 def _collect_cert_env(model: HaproxyConfig) -> Tuple[Dict[str, str], Dict[str, bool]]:
