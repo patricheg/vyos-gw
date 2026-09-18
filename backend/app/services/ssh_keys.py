@@ -7,6 +7,7 @@ locally, the public key is installed on the device through the REST API
 ever stored.
 """
 import os
+import threading
 import time
 from typing import Optional, Tuple
 
@@ -119,27 +120,81 @@ def _exec(ssh: paramiko.SSHClient, cmd: str, input_text: str = "", timeout: floa
     return stdout.read().decode(errors="ignore")
 
 
+# ─── Shared connection ────────────────────────────────────────────
+# sshd on VyOS throttles with MaxStartups: opening a fresh TCP connection
+# per file operation quickly trips it ("Exceeded MaxStartups" resets). All
+# remote file operations below reuse one long-lived connection instead.
+
+_ssh_lock = threading.RLock()
+_shared_ssh: Optional[paramiko.SSHClient] = None
+
+
+def _get_shared() -> paramiko.SSHClient:
+    global _shared_ssh
+    if _shared_ssh is not None:
+        transport = _shared_ssh.get_transport()
+        if transport is not None and transport.is_active():
+            return _shared_ssh
+        try:
+            _shared_ssh.close()
+        except Exception:
+            pass
+        _shared_ssh = None
+    _shared_ssh = ssh_connect()
+    try:
+        transport = _shared_ssh.get_transport()
+        if transport is not None:
+            transport.set_keepalive(30)
+    except Exception:
+        pass
+    return _shared_ssh
+
+
+def _drop_shared() -> None:
+    global _shared_ssh
+    if _shared_ssh is not None:
+        try:
+            _shared_ssh.close()
+        except Exception:
+            pass
+        _shared_ssh = None
+
+
+def run_remote(cmd: str, input_text: str = "", timeout: float = 30) -> str:
+    """Run a command on the device over the shared connection; reconnect once
+    if the connection died (e.g. sshd restarted by a commit)."""
+    for attempt in (1, 2):
+        with _ssh_lock:
+            try:
+                return _exec(_get_shared(), cmd, input_text, timeout)
+            except (paramiko.SSHException, OSError, EOFError) as e:
+                _drop_shared()
+                if attempt == 2:
+                    raise VyOSError(f"SSH command failed ({cmd}): {e}")
+
+
 def read_remote_file(path: str) -> str:
     """Read a root-owned file from the device (sudo cat)."""
-    ssh = ssh_connect()
+    return run_remote(f"sudo cat {path}")
+
+
+def remote_md5(path: str) -> Optional[str]:
+    """md5 of a root-owned file on the device; None if it does not exist."""
     try:
-        return _exec(ssh, f"sudo cat {path}")
-    finally:
-        ssh.close()
+        out = run_remote(f"sudo md5sum {path}")
+    except VyOSError:
+        return None
+    return out.split()[0] if out.split() else None
 
 
 def write_remote_file(path: str, content: str, mode: int = 0o644) -> None:
     """Write a file on the device. Uses sudo — the login user is in the sudo
     group on stock VyOS, and /config is root-owned."""
     import base64 as _b64mod
-    ssh = ssh_connect()
-    try:
-        b64 = _b64mod.b64encode(content.encode()).decode()
-        _exec(ssh, f"sudo mkdir -p {os.path.dirname(path)}")
-        _exec(ssh, f"sudo sh -c 'base64 -d > {path}'", input_text=b64)
-        _exec(ssh, f"sudo chmod {mode:o} {path}")
-    finally:
-        ssh.close()
+    b64 = _b64mod.b64encode(content.encode()).decode()
+    run_remote(f"sudo mkdir -p {os.path.dirname(path)}")
+    run_remote(f"sudo sh -c 'base64 -d > {path}'", input_text=b64)
+    run_remote(f"sudo chmod {mode:o} {path}")
 
 
 # ─── ACME certificate cache ───────────────────────────────────────

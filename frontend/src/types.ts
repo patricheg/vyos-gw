@@ -147,6 +147,8 @@ export interface HaproxyServiceRule {
   url_path: string | null;
   backend: string | null;
   redirect_location: string | null;
+  geoip_mode: 'allow' | 'deny' | null;   // null = inherit service
+  geoip_countries: string[];
 }
 
 export interface HaproxyService {
@@ -160,6 +162,17 @@ export interface HaproxyService {
   ssl_certificate: string | null;
   logging_facility: string | null;
   rules: HaproxyServiceRule[];
+  geoip_mode: 'off' | 'allow' | 'deny' | null;
+  geoip_countries: string[];
+}
+
+export interface GeoipStatus {
+  available: boolean;
+  updated_at: string | null;
+  entries: number;
+  countries: number;
+  source: string | null;
+  staged?: boolean;
 }
 
 export interface HaproxyGlobals {

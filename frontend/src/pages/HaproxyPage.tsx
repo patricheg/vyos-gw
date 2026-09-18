@@ -4,10 +4,12 @@ import {
   addHaproxyService, updateHaproxyService, deleteHaproxyService,
   addHaproxyBackend, updateHaproxyBackend, deleteHaproxyBackend,
   updateHaproxyGlobals,
+  getGeoipStatus, updateGeoipDb,
   getPki,
 } from '../api/client';
 import type { HaproxyStatus } from '../api/client';
-import type { HaproxyConfig, HaproxyService, HaproxyBackend, HaproxyServer, HaproxyServiceRule } from '../types';
+import type { HaproxyConfig, HaproxyService, HaproxyBackend, HaproxyServer, HaproxyServiceRule, GeoipStatus } from '../types';
+import CountrySelect from '../components/CountrySelect';
 
 const inputCls = 'w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded focus:outline-none focus:border-blue-500';
 
@@ -24,6 +26,8 @@ const EMPTY_SERVICE: HaproxyService = {
   ssl_certificate: null,
   logging_facility: null,
   rules: [],
+  geoip_mode: 'off',
+  geoip_countries: [],
 };
 
 const newRule = (n: number): HaproxyServiceRule => ({
@@ -34,6 +38,8 @@ const newRule = (n: number): HaproxyServiceRule => ({
   url_path: null,
   backend: null,
   redirect_location: null,
+  geoip_mode: null,
+  geoip_countries: [],
 });
 
 const EMPTY_SERVER: HaproxyServer = {
@@ -81,6 +87,9 @@ export default function HaproxyPage() {
   const [stagedBackends, setStagedBackends] = useState<string[]>([]);
   const [expandedSvcs, setExpandedSvcs] = useState<Set<string>>(new Set());
   const [status, setStatus] = useState<HaproxyStatus | null>(null);
+  const [geoip, setGeoip] = useState<GeoipStatus | null>(null);
+  const [geoipMsg, setGeoipMsg] = useState('');
+  const [geoipErr, setGeoipErr] = useState('');
 
   const toggleSvc = (name: string) => {
     setExpandedSvcs(prev => {
@@ -170,7 +179,12 @@ export default function HaproxyPage() {
   };
 
   const openEditSvc = (s: HaproxyService) => {
-    setSvcForm({ ...s });
+    setSvcForm({
+      ...s,
+      geoip_mode: s.geoip_mode ?? 'off',
+      geoip_countries: s.geoip_countries ?? [],
+      rules: s.rules.map(r => ({ ...r, geoip_mode: r.geoip_mode ?? null, geoip_countries: r.geoip_countries ?? [] })),
+    });
     setSvcListen(s.listen_addresses.join(', '));
     setEditSvc(s.name);
     setErr(''); setMsg('');
@@ -181,6 +195,7 @@ export default function HaproxyPage() {
     ...svcForm,
     description: svcForm.description || null,
     ssl_certificate: svcForm.ssl_certificate || null,
+    geoip_mode: svcForm.geoip_mode ?? 'off',
     listen_addresses: svcListen.split(',').map(a => a.trim()).filter(Boolean),
     rules: svcForm.rules.map(r => ({
       ...r,
@@ -412,12 +427,35 @@ export default function HaproxyPage() {
     }
   };
 
+  // ─── GeoIP DB ─────────────────────────────────────────────────
+
+  const openGlobals = () => {
+    setErr('');
+    setGeoipMsg(''); setGeoipErr('');
+    setShowGlobals(true);
+    getGeoipStatus().then(setGeoip).catch(() => setGeoip(null));
+  };
+
+  const handleUpdateGeoip = async () => {
+    setWorking('geoip');
+    setGeoipMsg(''); setGeoipErr('');
+    try {
+      const st = await updateGeoipDb();
+      setGeoip(st);
+      setGeoipMsg(st.staged ? 'Staged — commit pending changes to apply' : 'GeoIP DB updated');
+    } catch (e: any) {
+      setGeoipErr('Update failed: ' + (e.response?.data?.detail || e.message));
+    } finally {
+      setWorking(null);
+    }
+  };
+
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-2xl font-bold">HAProxy — Load Balancing</h2>
         <div className="flex gap-2">
-          <button onClick={() => { setErr(''); setShowGlobals(true); }} className="px-3 py-1 bg-gray-700 rounded hover:bg-gray-600 text-sm">
+          <button onClick={openGlobals} className="px-3 py-1 bg-gray-700 rounded hover:bg-gray-600 text-sm">
             ⚙ Global Settings
           </button>
           <button onClick={load} disabled={loading} className="px-3 py-1 bg-gray-700 rounded hover:bg-gray-600 text-sm disabled:opacity-50">
@@ -492,6 +530,30 @@ export default function HaproxyPage() {
                 <input type="number" value={globals.timeout_server} onChange={e => setGlobals({ ...globals, timeout_server: e.target.value })} className={inputCls} placeholder="50" />
               </div>
             </div>
+            <div className="mt-5 pt-4 border-t border-gray-700">
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="text-sm font-semibold text-gray-300">GeoIP DB</h4>
+                <button onClick={handleUpdateGeoip} disabled={isWorking('geoip')} className="px-3 py-1 bg-blue-600 rounded hover:bg-blue-500 text-white text-xs font-medium disabled:opacity-50">
+                  {isWorking('geoip') ? 'Updating…' : 'Update DB'}
+                </button>
+              </div>
+              {geoip === null ? (
+                <p className="text-xs text-gray-500">Status unavailable.</p>
+              ) : (
+                <div className="text-xs text-gray-400 space-y-1">
+                  <div>
+                    Status: {geoip.available
+                      ? <span className="text-green-400">available</span>
+                      : <span className="text-yellow-400">not available</span>}
+                  </div>
+                  {geoip.updated_at && <div>Updated: <span className="text-gray-300">{geoip.updated_at}</span></div>}
+                  <div>Entries: <span className="text-gray-300">{geoip.entries}</span> · Countries: <span className="text-gray-300">{geoip.countries}</span></div>
+                  {geoip.source && <div>Source: <span className="text-gray-300">{geoip.source}</span></div>}
+                </div>
+              )}
+              {geoipMsg && <div className="mt-2 text-xs text-green-300">{geoipMsg}</div>}
+              {geoipErr && <div className="mt-2 text-xs text-red-300">{geoipErr}</div>}
+            </div>
             {err && <div className="mt-4 p-3 bg-red-900/50 rounded border border-red-700 text-sm text-red-200">{err}</div>}
             <div className="flex justify-end gap-2 mt-6">
               <button onClick={() => setShowGlobals(false)} disabled={isWorking('globals')} className="px-4 py-2 rounded bg-gray-700 hover:bg-gray-600 disabled:opacity-50">Cancel</button>
@@ -536,6 +598,14 @@ export default function HaproxyPage() {
                     {s.ssl_certificate && <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-green-900 text-green-300" title={`TLS certificate: ${s.ssl_certificate}`}>TLS:{s.ssl_certificate}</span>}
                     {s.redirect_http_to_https && <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-purple-900 text-purple-300">→HTTPS</span>}
                     {s.logging_facility && <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-sky-900 text-sky-300">log:{s.logging_facility}</span>}
+                    {s.geoip_mode && s.geoip_mode !== 'off' && (
+                      <span
+                        className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${s.geoip_mode === 'allow' ? 'bg-amber-900 text-amber-300' : 'bg-orange-900 text-orange-300'}`}
+                        title={`GeoIP ${s.geoip_mode}: ${s.geoip_countries.join(', ') || 'no countries selected'}`}
+                      >
+                        GeoIP: {s.geoip_mode}{s.geoip_countries.length > 0 && ' ' + s.geoip_countries.slice(0, 4).join(',') + (s.geoip_countries.length > 4 ? ',…' : '')}
+                      </span>
+                    )}
                     {s.rules.length > 0 && <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-violet-900 text-violet-300">{s.rules.length} rule{s.rules.length > 1 ? 's' : ''}</span>}
                   </div>
                   <div className="flex items-center gap-3 whitespace-nowrap" onClick={e => e.stopPropagation()}>
@@ -756,10 +826,55 @@ export default function HaproxyPage() {
                             <input value={r.redirect_location || ''} onChange={e => setRule(idx, { redirect_location: e.target.value })} className={inputCls} placeholder="/new-path or https://example.com/page" />
                           )}
                         </div>
+                        {(svcForm.mode || 'http') === 'http' && (
+                          <div className="flex items-center gap-2">
+                            <span className="text-gray-500 text-xs w-8 text-right">geo</span>
+                            <select
+                              value={r.geoip_mode ?? ''}
+                              onChange={e => setRule(idx, { geoip_mode: (e.target.value || null) as 'allow' | 'deny' | null })}
+                              className={inputCls + ' !w-28'}
+                            >
+                              <option value="">Inherit</option>
+                              <option value="allow">Allow</option>
+                              <option value="deny">Deny</option>
+                            </select>
+                            {r.geoip_mode !== null && (
+                              <div className="flex-1">
+                                <CountrySelect
+                                  value={r.geoip_countries}
+                                  onChange={codes => setRule(idx, { geoip_countries: codes })}
+                                  placeholder="Countries…"
+                                />
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
                 )}
+              </div>
+              <div className="col-span-2">
+                <label className="block text-sm text-gray-400 mb-1">GeoIP restriction</label>
+                <div className="flex items-start gap-2">
+                  <select
+                    value={svcForm.geoip_mode || 'off'}
+                    onChange={e => setSvcForm({ ...svcForm, geoip_mode: e.target.value as 'off' | 'allow' | 'deny' })}
+                    className={inputCls + ' !w-52'}
+                  >
+                    <option value="off">Off</option>
+                    <option value="allow">Allow only selected</option>
+                    <option value="deny">Deny selected</option>
+                  </select>
+                  {svcForm.geoip_mode && svcForm.geoip_mode !== 'off' && (
+                    <div className="flex-1">
+                      <CountrySelect
+                        value={svcForm.geoip_countries}
+                        onChange={codes => setSvcForm({ ...svcForm, geoip_countries: codes })}
+                      />
+                    </div>
+                  )}
+                </div>
               </div>
               <div>
                 <label className="block text-sm text-gray-400 mb-1">TLS certificate</label>

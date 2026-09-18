@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { Interface, FirewallRuleset, FirewallRule, LogEntry, SystemConfig, SystemResources, FirewallLogEntry, ServiceInfo, NatRule, HaproxyConfig, HaproxyService, HaproxyBackend, HaproxyGlobals, PkiConfig, PkiAcmeCreate, RouteEntry, StaticRoute, AddressGroup } from '../types';
+import type { Interface, FirewallRuleset, FirewallRule, LogEntry, SystemConfig, SystemResources, FirewallLogEntry, ServiceInfo, NatRule, HaproxyConfig, HaproxyService, HaproxyBackend, HaproxyGlobals, GeoipStatus, PkiConfig, PkiAcmeCreate, RouteEntry, StaticRoute, AddressGroup } from '../types';
 
 const api = axios.create({
   baseURL: '/api',
@@ -156,6 +156,11 @@ export const deleteHaproxyBackend = (name: string) =>
   api.delete(`/haproxy/backends/${name}`).then(r => r.data);
 export const updateHaproxyGlobals = (data: HaproxyGlobals) =>
   api.put('/haproxy/globals', data).then(r => r.data);
+
+// GeoIP DB (DB-IP Lite → HAProxy map)
+export const getGeoipStatus = () => api.get<GeoipStatus>('/haproxy/geoip/status').then(r => r.data);
+export const updateGeoipDb = () =>
+  api.post<GeoipStatus>('/haproxy/geoip/update', null, { timeout: 300000 }).then(r => r.data);
 
 // PKI (certificates)
 export const getPki = () => api.get<PkiConfig>('/pki').then(r => r.data);

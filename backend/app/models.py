@@ -168,6 +168,8 @@ class HaproxyServiceRule(BaseModel):
     url_path: Optional[str] = None
     backend: Optional[str] = None          # action: route to backend
     redirect_location: Optional[str] = None  # action: HTTP redirect
+    geoip_mode: Optional[Literal["allow", "deny"]] = None  # None = inherit service
+    geoip_countries: List[str] = []        # ISO 3166-1 alpha-2 codes
 
 class HaproxyService(BaseModel):
     name: str
@@ -180,6 +182,8 @@ class HaproxyService(BaseModel):
     ssl_certificate: Optional[str] = None
     logging_facility: Optional[str] = None
     rules: List[HaproxyServiceRule] = []
+    geoip_mode: Optional[Literal["off", "allow", "deny"]] = "off"
+    geoip_countries: List[str] = []        # ISO 3166-1 alpha-2 codes
 
 class HaproxyGlobals(BaseModel):
     max_connections: Optional[int] = None

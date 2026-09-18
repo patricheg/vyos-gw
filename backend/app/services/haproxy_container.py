@@ -39,6 +39,9 @@ _ACME_BACKEND_PORT = 80
 _FILES_DIR_HOST = "/config/auth/haproxy"   # persistent + writable by vyattacfg group
 _ENTRYPOINT_HOST = f"{_FILES_DIR_HOST}/entrypoint.sh"
 _ENTRYPOINT_CTR = "/entrypoint/entrypoint.sh"
+_GEOIP_MAP_HOST = f"{_FILES_DIR_HOST}/geoip.map"
+_GEOIP_MAP_CTR = "/entrypoint/geoip.map"   # "files" volume is mounted at /entrypoint
+ENV_GEOIP_MD5 = "HAPROXY_GEOIP_MD5"
 
 # The official haproxy image runs as the unprivileged "haproxy" user, so all
 # generated files live under /tmp (root filesystem is not writable).
@@ -197,6 +200,16 @@ def pull_image() -> str:
 # ─── haproxy.cfg generation ───────────────────────────────────────
 
 
+def geoip_used(model: HaproxyConfig) -> bool:
+    """True when any service or rule has a GeoIP restriction configured."""
+    for svc in model.services:
+        if svc.geoip_mode in ("allow", "deny") and svc.geoip_countries:
+            return True
+        if any(r.geoip_mode and r.geoip_countries for r in svc.rules):
+            return True
+    return False
+
+
 def _pem_ref(name: str, acme: bool) -> str:
     # all certs (PKI and ACME) arrive via HAPROXY_CERT_* env vars
     return f"{_CTR_WORKDIR}/certs/{_env_safe(name)}.pem"
@@ -247,15 +260,28 @@ def render_cfg(model: HaproxyConfig, acme_certs: Dict[str, bool]) -> str:
             L.append("    option httplog")
             if not svc.ssl_certificate:
                 L.append("    acl acme_challenge path_beg /.well-known/acme-challenge/")
+            # GeoIP: resolve the client country once per request, then enforce
+            # service-level and per-rule restrictions. ACME challenges must
+            # never be blocked — Let's Encrypt validates from anywhere.
+            svc_geoip = svc.geoip_mode in ("allow", "deny") and bool(svc.geoip_countries)
+            rules_geoip = [r for r in svc.rules if r.geoip_mode and r.geoip_countries]
+            acme_guard = " !acme_challenge" if not svc.ssl_certificate else ""
+            if svc_geoip or rules_geoip:
+                L.append(f"    http-request set-var(txn.geoip_cc) src,map_ip({_GEOIP_MAP_CTR},ZZ)")
+            if svc_geoip:
+                ccs = " ".join(c.upper() for c in svc.geoip_countries)
+                L.append(f"    acl geoip_svc_match var(txn.geoip_cc) -m str {ccs}")
+                if svc.geoip_mode == "allow":
+                    L.append(f"    http-request deny deny_status 403 if !geoip_svc_match{acme_guard}")
+                else:
+                    L.append(f"    http-request deny deny_status 403 if geoip_svc_match{acme_guard}")
             if svc.redirect_http_to_https:
                 if svc.ssl_certificate:
                     L.append("    http-request redirect scheme https code 301 unless { ssl_fc }")
                 else:
                     L.append("    http-request redirect scheme https code 301 if !{ ssl_fc } !acme_challenge")
-            # ACME HTTP-01 passthrough to certbot (runs on the host)
-            if has_http_frontend and not svc.ssl_certificate:
-                L.append("    use_backend acme-certbot if acme_challenge")
-            for r in sorted(svc.rules, key=lambda x: x.number):
+            ordered_rules = sorted(svc.rules, key=lambda x: x.number)
+            for r in ordered_rules:
                 conds = []
                 if r.domain_name:
                     acls = [f"    acl rule{r.number}_host hdr(host) -i {r.domain_name}"]
@@ -268,12 +294,36 @@ def render_cfg(model: HaproxyConfig, acme_certs: Dict[str, bool]) -> str:
                     L.append(f"    acl rule{r.number}_path {fetch} {r.url_path}")
                     conds.append(f"rule{r.number}_path")
                 cond = " ".join(conds) if conds else "TRUE"
-                if r.backend:
-                    L.append(f"    use_backend {r.backend} if {cond}")
-                elif r.redirect_location:
+                if r.geoip_mode and r.geoip_countries and conds:
+                    ccs = " ".join(c.upper() for c in r.geoip_countries)
+                    L.append(f"    acl rule{r.number}_cc var(txn.geoip_cc) -m str {ccs}")
+                    if r.geoip_mode == "allow":
+                        L.append(f"    http-request deny deny_status 403 if {cond} !rule{r.number}_cc")
+                    else:
+                        L.append(f"    http-request deny deny_status 403 if {cond} rule{r.number}_cc")
+                if r.redirect_location:
                     L.append(f"    http-request redirect location {r.redirect_location} if {cond}")
+            # ACME HTTP-01 passthrough to certbot (runs on the host); first
+            # among use_backend lines so challenges always win
+            if has_http_frontend and not svc.ssl_certificate:
+                L.append("    use_backend acme-certbot if acme_challenge")
+            for r in ordered_rules:
+                if r.backend:
+                    conds = []
+                    if r.domain_name:
+                        conds.append(f"rule{r.number}_host")
+                    if r.url_path and r.url_path_match:
+                        conds.append(f"rule{r.number}_path")
+                    L.append(f"    use_backend {r.backend} if {' '.join(conds) if conds else 'TRUE'}")
         else:
             L.append("    option tcplog")
+            if svc.geoip_mode in ("allow", "deny") and svc.geoip_countries:
+                ccs = " ".join(c.upper() for c in svc.geoip_countries)
+                expr = f"src,map_ip({_GEOIP_MAP_CTR},ZZ) -m str {ccs}"
+                if svc.geoip_mode == "allow":
+                    L.append(f"    tcp-request content reject unless {{ {expr} }}")
+                else:
+                    L.append(f"    tcp-request content reject if {{ {expr} }}")
         if svc.backends:
             L.append(f"    default_backend {svc.backends[0]}")
         L.append("")
@@ -436,6 +486,27 @@ def provision_files() -> None:
     ssh_keys.write_remote_file(f"{_ACME_VOLUME_SOURCE}/.keep", "", mode=0o644)
 
 
+def _push_geoip_map() -> str:
+    """Push the local GeoIP map to the device if it changed; return its md5."""
+    import hashlib
+    from app.services import geoip, ssh_keys
+
+    content = geoip.read_map()
+    if content is None:
+        raise VyOSError(
+            "GeoIP is enabled but the database is not downloaded yet — "
+            "use 'Update GeoIP DB' on the HAProxy page first"
+        )
+    local_md5 = hashlib.md5(content.encode()).hexdigest()
+    try:
+        current = ssh_keys.remote_md5(_GEOIP_MAP_HOST)
+    except VyOSError:
+        current = None
+    if current != local_md5:
+        ssh_keys.write_remote_file(_GEOIP_MAP_HOST, content, mode=0o644)
+    return local_md5
+
+
 def apply_model(model: HaproxyConfig) -> int:
     """Stage all commands needed to run the given model in the container."""
     cert_env, acme_map = _collect_cert_env(model)
@@ -447,12 +518,15 @@ def apply_model(model: HaproxyConfig) -> int:
     }
     for key, pem in cert_env.items():
         new_env[key] = _b64(pem)
+    if geoip_used(model):
+        # the env value forces a container restart when only the map changed
+        new_env[ENV_GEOIP_MD5] = _push_geoip_map()
 
     _stage_base_config()
     env_base = f"set container name {CONTAINER_NAME} environment"
     old_env = _raw_env()
     for key in old_env:
-        if key not in new_env and (key.startswith(ENV_CERT_PREFIX) or key in (ENV_MODEL, ENV_CFG)):
+        if key not in new_env and (key.startswith(ENV_CERT_PREFIX) or key in (ENV_MODEL, ENV_CFG, ENV_GEOIP_MD5)):
             staging_area.add(
                 f"delete container name {CONTAINER_NAME} environment {key}",
                 f"HAProxy container: drop {key}", "haproxy",

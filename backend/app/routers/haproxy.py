@@ -4,10 +4,21 @@ import re
 from fastapi import APIRouter, HTTPException
 
 from app.models import HaproxyConfig, HaproxyService, HaproxyBackend, HaproxyGlobals
-from app.services import haproxy_container
+from app.services import haproxy_container, geoip as geoip_service
 from app.services.vyos_client import VyOSError
 
 router = APIRouter(prefix="/api/haproxy", tags=["haproxy"])
+
+_CC_RE = re.compile(r"^[A-Z]{2}$")
+
+
+def _validate_geoip(mode, countries, where: str):
+    if mode in ("allow", "deny"):
+        if not countries:
+            raise HTTPException(status_code=400, detail=f"{where}: GeoIP {mode} needs at least one country")
+        bad = [c for c in countries if not _CC_RE.match(c)]
+        if bad:
+            raise HTTPException(status_code=400, detail=f"{where}: bad country code(s): {', '.join(bad)}")
 
 
 def _validate_service(svc: HaproxyService):
@@ -31,6 +42,11 @@ def _validate_service(svc: HaproxyService):
             )
     if svc.rules and svc.mode == "tcp":
         raise HTTPException(status_code=400, detail="Routing rules require HTTP mode (TCP mode cannot inspect URLs)")
+    _validate_geoip(svc.geoip_mode, svc.geoip_countries, f"Service {svc.name!r}")
+    for r in svc.rules:
+        _validate_geoip(r.geoip_mode, r.geoip_countries, f"Rule {r.number}")
+        if r.geoip_mode and svc.mode == "tcp":
+            raise HTTPException(status_code=400, detail=f"Rule {r.number}: per-rule GeoIP requires HTTP mode")
 
 
 _ADDR_PORT_RE = re.compile(r"^(\d{1,3}(?:\.\d{1,3}){3}):(\d{1,5})$")
@@ -74,6 +90,27 @@ def _apply_or_502(model: HaproxyConfig):
 @router.get("/status")
 async def get_status():
     return await asyncio.to_thread(_engine_call, haproxy_container.get_status)
+
+
+@router.get("/geoip/status")
+async def geoip_status():
+    return geoip_service.status()
+
+
+@router.post("/geoip/update")
+async def geoip_update():
+    """Download the latest DB-IP Lite country DB, rebuild the HAProxy map and
+    restage the container so the new map takes effect on the next commit."""
+    try:
+        meta = await asyncio.to_thread(geoip_service.update)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"GeoIP DB download failed: {e}")
+    if haproxy_container.is_provisioned():
+        model = await asyncio.to_thread(_engine_call, haproxy_container.get_model)
+        if haproxy_container.geoip_used(model):
+            await asyncio.to_thread(_engine_call, haproxy_container.apply_model, model)
+            meta["staged"] = True
+    return meta
 
 
 @router.post("/provision")
