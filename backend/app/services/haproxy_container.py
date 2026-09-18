@@ -331,8 +331,13 @@ def _read_acme_pem(name: str) -> str:
         fullchain = ssh_keys.read_remote_file(f"{base}/fullchain.pem")
         privkey = ssh_keys.read_remote_file(f"{base}/privkey.pem")
     except VyOSError as e:
+        if "No such file" in str(e):
+            raise VyOSError(
+                f"ACME certificate {name!r} is not issued yet (no files under {base})"
+            ) from e
         raise VyOSError(
-            f"ACME certificate {name!r} is not issued yet (no files under {base}): {e}"
+            f"Cannot read ACME certificate {name!r} via SSH (the device may be "
+            f"restarting sshd after a commit — try again in a few seconds): {e}"
         ) from e
     return fullchain.rstrip() + "\n" + privkey.rstrip() + "\n"
 

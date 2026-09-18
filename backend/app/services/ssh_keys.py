@@ -82,7 +82,7 @@ def install_pubkey() -> str:
     return user
 
 
-def ssh_connect(timeout: float = 15, retries: int = 4) -> paramiko.SSHClient:
+def ssh_connect(timeout: float = 15, retries: int = 8) -> paramiko.SSHClient:
     host, port = _device_host_port()
     key = _keypair()
     user = _pick_login_user()
@@ -101,7 +101,7 @@ def ssh_connect(timeout: float = 15, retries: int = 4) -> paramiko.SSHClient:
                 ssh.close()
             except Exception:
                 pass
-            time.sleep(1 + attempt)
+            time.sleep(min(1 + attempt * 2, 10))  # sshd bounces during commits
     raise VyOSError(f"SSH key auth to {host}:{port} failed: {last}")
 
 
