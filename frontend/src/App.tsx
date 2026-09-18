@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Routes, Route } from 'react-router-dom';
 import Layout from './components/Layout';
-import ConnectionPage from './pages/ConnectionPage';
+import LoginPage from './pages/LoginPage';
 import InterfacesPage from './pages/InterfacesPage';
 import FirewallPage from './pages/FirewallPage';
 import NatPage from './pages/NatPage';
@@ -12,38 +12,48 @@ import LogsPage from './pages/LogsPage';
 import FirewallLogsPage from './pages/FirewallLogsPage';
 import ServicesPage from './pages/ServicesPage';
 import SystemPage from './pages/SystemPage';
-import { getConnectionStatus, disconnectDevice } from './api/client';
+import { getAuthStatus, logout, AuthStatus } from './api/client';
 
 export default function App() {
-  const [connected, setConnected] = useState<boolean | null>(null);
+  const [auth, setAuth] = useState<AuthStatus | null>(null);
 
   const refresh = useCallback(() => {
-    getConnectionStatus()
-      .then(s => setConnected(s.connected))
-      .catch(() => setConnected(false));
+    getAuthStatus()
+      .then(setAuth)
+      .catch(() => setAuth({ configured: true, authenticated: false }));
   }, []);
 
   useEffect(() => { refresh(); }, [refresh]);
 
-  const handleSwitch = useCallback(async () => {
-    await disconnectDevice().catch(() => {});
+  // Any 401 from the API drops us back to the login screen.
+  useEffect(() => {
+    const onUnauthorized = () => setAuth(a => (a ? { ...a, authenticated: false } : a));
+    window.addEventListener('vgw:unauthorized', onUnauthorized);
+    return () => window.removeEventListener('vgw:unauthorized', onUnauthorized);
+  }, []);
+
+  const handleLogout = useCallback(async () => {
+    await logout().catch(() => {});
     refresh();
   }, [refresh]);
 
-  if (connected === null) {
+  if (auth === null) {
     return (
       <div className="min-h-screen flex items-center justify-center text-gray-400">
-        Connecting…
+        Loading…
       </div>
     );
   }
 
-  if (!connected) {
-    return <ConnectionPage onConnected={refresh} />;
+  if (!auth.configured) {
+    return <LoginPage mode="setup" onDone={refresh} />;
+  }
+  if (!auth.authenticated) {
+    return <LoginPage mode="login" onDone={refresh} />;
   }
 
   return (
-    <Layout onSwitchDevice={handleSwitch}>
+    <Layout onLogout={handleLogout}>
       <Routes>
         <Route path="/" element={<InterfacesPage />} />
         <Route path="/firewall" element={<FirewallPage />} />

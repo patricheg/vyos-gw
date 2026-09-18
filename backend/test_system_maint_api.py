@@ -5,10 +5,15 @@ import sys
 sys.path.insert(0, ".")
 from fastapi.testclient import TestClient
 from app.main import app
+from app.services import auth
 
 with TestClient(app) as c:
-    r = c.get("/api/connection/status")
-    print("status:", r.status_code, r.json().get("connected"), r.json().get("host"))
+    # bypass the login form: mint a session cookie directly
+    username = (auth._load() or {}).get("username", "admin")
+    c.cookies.set(auth.COOKIE_NAME, auth.make_token(username))
+
+    r = c.get("/api/health")
+    print("health:", r.status_code, r.json())
 
     r = c.post("/api/system/save")
     print("save:", r.status_code, r.json())

@@ -39,9 +39,11 @@ def public_key_parts() -> Tuple[str, str]:
 
 
 def _device_host_port() -> Tuple[str, int]:
-    from app.services.connections import connection_manager
-    dev = connection_manager.active_device()
-    host = dev["host"]
+    from urllib.parse import urlparse
+
+    from app.config import settings
+
+    host = urlparse(settings.vyos_api_url).hostname or settings.vyos_host
     port = 22
     try:
         ssh_cfg = vyos_client._post("/retrieve", {"op": "showConfig", "path": ["service", "ssh"]})

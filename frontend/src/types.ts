@@ -254,35 +254,3 @@ export interface StaticRoute {
   disabled: boolean;
 }
 
-export interface ConnectionStatus {
-  connected: boolean;
-  host: string | null;
-  port: number | null;
-  label: string | null;
-  host_name: string | null;
-  version: string | null;
-}
-
-export interface SavedDevice {
-  id: string;
-  host: string;
-  port: number;
-  label: string | null;
-  last_used: string | null;
-}
-
-export interface ConnectResult {
-  status: 'ok' | 'api_failed';
-  host_name?: string | null;
-  version?: string | null;
-  detail?: string;
-  ssh_available?: boolean;
-  ssh_banner?: string | null;
-}
-
-export interface SshSetupResult {
-  status: 'ok';
-  api_key: string;
-  host_name?: string | null;
-  version?: string | null;
-}

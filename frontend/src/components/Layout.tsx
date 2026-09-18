@@ -1,22 +1,13 @@
 import { Link, useLocation } from 'react-router-dom';
 import { useEffect, useState, useCallback } from 'react';
-import { getStaged, commitStaged, discardStaged, removeStaged, getConnectionStatus, saveSystemConfig } from '../api/client';
+import { getStaged, commitStaged, discardStaged, removeStaged, saveSystemConfig } from '../api/client';
 import type { StagedChange } from '../api/client';
 
-export default function Layout({ children, onSwitchDevice }: { children: React.ReactNode; onSwitchDevice?: () => void }) {
+export default function Layout({ children, onLogout }: { children: React.ReactNode; onLogout?: () => void }) {
   const loc = useLocation();
   const [staged, setStaged] = useState<StagedChange[]>([]);
   const [stagedLoading, setStagedLoading] = useState(false);
   const [stagedMsg, setStagedMsg] = useState('');
-  const [deviceLabel, setDeviceLabel] = useState('');
-
-  useEffect(() => {
-    getConnectionStatus()
-      .then(s => {
-        if (s.connected) setDeviceLabel(`${s.label || s.host_name || s.host}${s.port ? `:${s.port}` : ''}`);
-      })
-      .catch(() => {});
-  }, []);
 
   const loadStaged = useCallback(async () => {
     try {
@@ -112,17 +103,13 @@ export default function Layout({ children, onSwitchDevice }: { children: React.R
         <div className="max-w-7xl mx-auto px-4 py-3 flex flex-wrap items-center gap-x-4 gap-y-2 justify-between">
           <div className="flex items-center gap-3 flex-wrap">
             <h1 className="text-xl font-bold text-white whitespace-nowrap">VyOS Web Gateway</h1>
-            {deviceLabel && (
-              <span className="px-2 py-1 rounded bg-gray-900 border border-gray-600 text-xs font-mono text-green-300 max-w-[220px] truncate" title="Connected device">
-                {deviceLabel}
-              </span>
-            )}
-            {onSwitchDevice && (
+            {onLogout && (
               <button
-                onClick={() => { if (confirm('Disconnect and switch to another device? Uncommitted pending changes will be discarded.')) onSwitchDevice(); }}
+                onClick={onLogout}
+                title="Sign out of the management console"
                 className="text-xs text-gray-400 hover:text-white underline"
               >
-                switch
+                logout
               </button>
             )}
             <button

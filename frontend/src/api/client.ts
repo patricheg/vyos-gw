@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { Interface, FirewallRuleset, FirewallRule, LogEntry, SystemConfig, SystemResources, FirewallLogEntry, ServiceInfo, NatRule, HaproxyConfig, HaproxyService, HaproxyBackend, HaproxyGlobals, PkiConfig, PkiAcmeCreate, RouteEntry, StaticRoute, AddressGroup, ConnectionStatus, SavedDevice, ConnectResult, SshSetupResult } from '../types';
+import type { Interface, FirewallRuleset, FirewallRule, LogEntry, SystemConfig, SystemResources, FirewallLogEntry, ServiceInfo, NatRule, HaproxyConfig, HaproxyService, HaproxyBackend, HaproxyGlobals, PkiConfig, PkiAcmeCreate, RouteEntry, StaticRoute, AddressGroup } from '../types';
 
 const api = axios.create({
   baseURL: '/api',
@@ -7,6 +7,29 @@ const api = axios.create({
     'Content-Type': 'application/json',
   },
 });
+
+// On 401 the session expired or was never established — tell the App gate
+// to show the login screen again.
+api.interceptors.response.use(
+  r => r,
+  err => {
+    if (err.response?.status === 401 && !String(err.config?.url || '').startsWith('/auth/')) {
+      window.dispatchEvent(new Event('vgw:unauthorized'));
+    }
+    return Promise.reject(err);
+  },
+);
+
+// Auth (local web-UI password)
+export interface AuthStatus { configured: boolean; authenticated: boolean }
+export const getAuthStatus = () => api.get<AuthStatus>('/auth/status').then(r => r.data);
+export const setupPassword = (username: string, password: string) =>
+  api.post('/auth/setup', { username, password }).then(r => r.data);
+export const login = (username: string, password: string) =>
+  api.post('/auth/login', { username, password }).then(r => r.data);
+export const logout = () => api.post('/auth/logout').then(r => r.data);
+export const changePassword = (old_password: string, new_password: string) =>
+  api.post('/auth/password', { old_password, new_password }).then(r => r.data);
 
 export const getInterfaces = () => api.get<Interface[]>('/interfaces/').then(r => r.data);
 export const updateInterface = (name: string, data: Partial<Interface>) =>
@@ -167,12 +190,3 @@ export const getStaged = () => api.get<StagedChange[]>('/staged/').then(r => r.d
 export const commitStaged = () => api.post('/staged/commit').then(r => r.data);
 export const discardStaged = () => api.delete('/staged/').then(r => r.data);
 export const removeStaged = (id: string) => api.delete(`/staged/${id}`).then(r => r.data);
-
-export const getConnectionStatus = () => api.get<ConnectionStatus>('/connection/status').then(r => r.data);
-export const getSavedDevices = () => api.get<SavedDevice[]>('/connection/devices').then(r => r.data);
-export const connectDevice = (data: { host?: string; port?: number; api_key?: string; device_id?: string; label?: string; save?: boolean }) =>
-  api.post<ConnectResult>('/connection/connect', data).then(r => r.data);
-export const setupDeviceViaSsh = (data: { host: string; ssh_user: string; ssh_password: string; api_port?: number; label?: string }) =>
-  api.post<SshSetupResult>('/connection/setup-ssh', data).then(r => r.data);
-export const disconnectDevice = () => api.post('/connection/disconnect').then(r => r.data);
-export const deleteSavedDevice = (id: string) => api.delete(`/connection/devices/${id}`).then(r => r.data);

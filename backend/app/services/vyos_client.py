@@ -981,18 +981,5 @@ def _read_acme_fullchain(name: str) -> Optional[str]:
         return None
 
 
-class _ClientProxy:
-    """Forwards attribute access to the currently connected device's client.
-
-    Keeps the historical `vyos_client.get_...()` call sites working while the
-    actual client is owned by the connection manager (multi-device support).
-    """
-    def __getattr__(self, item):
-        from app.services.connections import connection_manager
-        client = connection_manager.client
-        if client is None:
-            raise VyOSError("Not connected to any VyOS device — log in first")
-        return getattr(client, item)
-
-
-vyos_client = _ClientProxy()
+# Single-device client, configured from settings (backend/app/config.py).
+vyos_client = VyOSClient()
