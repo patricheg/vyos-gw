@@ -85,7 +85,14 @@ def install_pubkey() -> str:
     return user
 
 
-def ssh_connect(timeout: float = 15, retries: int = 8) -> paramiko.SSHClient:
+def ssh_connect(timeout: float = 15, retries: int = 4) -> paramiko.SSHClient:
+    global _cooldown_until
+    now = time.time()
+    if now < _cooldown_until:
+        raise VyOSError(
+            f"SSH is cooling down after repeated failures — retry in "
+            f"{int(_cooldown_until - now)}s (protecting sshd from MaxStartups)"
+        )
     host, port = _device_host_port()
     key = _keypair()
     user = _pick_login_user()
@@ -97,6 +104,7 @@ def ssh_connect(timeout: float = 15, retries: int = 8) -> paramiko.SSHClient:
             ssh.connect(host, port=port, username=user, pkey=key, timeout=timeout,
                         banner_timeout=timeout, auth_timeout=timeout,
                         look_for_keys=False, allow_agent=False)
+            _cooldown_until = 0.0
             return ssh
         except Exception as e:
             last = e
@@ -105,7 +113,11 @@ def ssh_connect(timeout: float = 15, retries: int = 8) -> paramiko.SSHClient:
             except Exception:
                 pass
             time.sleep(min(1 + attempt * 2, 10))  # sshd bounces during commits
+    _cooldown_until = time.time() + 60
     raise VyOSError(f"SSH key auth to {host}:{port} failed: {last}")
+
+
+_cooldown_until = 0.0
 
 
 def _exec(ssh: paramiko.SSHClient, cmd: str, input_text: str = "", timeout: float = 30) -> str:
@@ -219,5 +231,13 @@ def acme_cache_read(name: str, suffix: str) -> Optional[str]:
         with open(os.path.join(_ACME_CACHE_DIR, f"{name}.{suffix}.pem")) as f:
             data = f.read()
         return data if "BEGIN" in data else None
+    except OSError:
+        return None
+
+
+def acme_cache_age(name: str, suffix: str) -> Optional[float]:
+    """Seconds since the cache entry was written; None if absent."""
+    try:
+        return time.time() - os.path.getmtime(os.path.join(_ACME_CACHE_DIR, f"{name}.{suffix}.pem"))
     except OSError:
         return None
