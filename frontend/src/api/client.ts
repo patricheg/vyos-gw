@@ -162,6 +162,23 @@ export const getGeoipStatus = () => api.get<GeoipStatus>('/haproxy/geoip/status'
 export const updateGeoipDb = () =>
   api.post<GeoipStatus>('/haproxy/geoip/update', null, { timeout: 300000 }).then(r => r.data);
 
+// Deploy (on-device console container)
+export interface DeployStatus {
+  on_device: boolean;
+  container_configured: boolean;
+  image_present: boolean | null;
+  data_seeded: boolean | null;
+}
+export interface DeployProvisionResult {
+  build: string;
+  image: string;
+  data_seeded: boolean;
+  staged: boolean;
+}
+export const getDeployStatus = () => api.get<DeployStatus>('/deploy/status').then(r => r.data);
+export const provisionDeploy = () =>
+  api.post<DeployProvisionResult>('/deploy/provision', null, { timeout: 900000 }).then(r => r.data);
+
 // PKI (certificates)
 export const getPki = () => api.get<PkiConfig>('/pki').then(r => r.data);
 export const importPkiCertificate = (data: { name: string; certificate: string; private_key?: string | null; description?: string | null }) =>

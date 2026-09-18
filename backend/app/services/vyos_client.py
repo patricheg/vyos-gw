@@ -34,17 +34,36 @@ class VyOSClient:
 
     # ─── Transport ────────────────────────────────────────────────
 
+    def _url_candidates(self) -> List[str]:
+        """base_url first (sticky), then fallbacks. On-device the API may be
+        reachable on loopback even when the router address is firewalled."""
+        cands = [self.base_url]
+        if settings.on_device:
+            cands.append("https://127.0.0.1:8443")
+            cands.append(settings.vyos_api_url)
+        seen: Dict[str, None] = {}
+        for u in cands:
+            seen[u.rstrip("/")] = None
+        return list(seen)
+
     def _post(self, endpoint: str, payload: Any) -> Any:
         """POST to a VyOS API endpoint; return `data` or raise VyOSError."""
-        try:
-            resp = self._session.post(
-                f"{self.base_url}{endpoint}",
-                data={"data": json.dumps(payload), "key": self.key},
-                verify=self.verify,
-                timeout=self.timeout,
-            )
-        except requests.RequestException as e:
-            raise VyOSError(f"API request to {endpoint} failed: {e}") from e
+        resp = None
+        last: Optional[Exception] = None
+        for base in self._url_candidates():
+            try:
+                resp = self._session.post(
+                    f"{base}{endpoint}",
+                    data={"data": json.dumps(payload), "key": self.key},
+                    verify=self.verify,
+                    timeout=self.timeout,
+                )
+                self.base_url = base  # stick to the URL that answered
+                break
+            except requests.RequestException as e:
+                last = e
+        if resp is None:
+            raise VyOSError(f"API request to {endpoint} failed: {last}")
 
         try:
             body = resp.json()
@@ -976,14 +995,14 @@ def _read_acme_fullchain(name: str) -> Optional[str]:
 
     Cache-first: a fresh cache entry (<24h) is used immediately, because an
     SSH attempt can hang for over a minute in retries when sshd throttles
-    (MaxStartups). Older cache is refreshed via SSH on a best-effort basis."""
-    from app.services import ssh_keys
+    (MaxStartups). On-device reads are local and instant either way."""
+    from app.services import fileaccess, ssh_keys
     cached = ssh_keys.acme_cache_read(name, "fullchain")
     age = ssh_keys.acme_cache_age(name, "fullchain")
     if cached and age is not None and age < 24 * 3600:
         return cached
     try:
-        pem = ssh_keys.read_remote_file(f"/config/auth/letsencrypt/live/{name}/fullchain.pem")
+        pem = fileaccess.read_file(f"/config/auth/letsencrypt/live/{name}/fullchain.pem")
         if "BEGIN" in pem:
             ssh_keys.acme_cache_write(name, "fullchain", pem)
             return pem

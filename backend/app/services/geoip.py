@@ -21,7 +21,10 @@ from typing import Any, Dict, List, Optional
 
 import requests
 
-_DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data")
+from app.config import settings
+
+_DATA_DIR = settings.data_dir or os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data")
 _GEOIP_DIR = os.path.join(_DATA_DIR, "geoip")
 MAP_PATH = os.path.join(_GEOIP_DIR, "geoip.map")
 _META_PATH = os.path.join(_GEOIP_DIR, "geoip.json")

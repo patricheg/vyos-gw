@@ -14,7 +14,10 @@ from typing import Optional, Tuple
 
 from fastapi import HTTPException, Request
 
-_DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data")
+from app.config import settings
+
+_DATA_DIR = settings.data_dir or os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data")
 _AUTH_PATH = os.path.join(_DATA_DIR, "auth.json")
 _SECRET_PATH = os.path.join(_DATA_DIR, "secret.key")
 

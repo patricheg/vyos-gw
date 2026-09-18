@@ -381,11 +381,11 @@ def _read_acme_pem(name: str) -> str:
     sshd often bounces right after a commit, so a successful read is cached
     locally and the cache is used when SSH is temporarily unreachable.
     """
-    from app.services import ssh_keys
+    from app.services import fileaccess, ssh_keys
     base = f"{_ACME_VOLUME_SOURCE}/live/{name}"
     try:
-        fullchain = ssh_keys.read_remote_file(f"{base}/fullchain.pem")
-        privkey = ssh_keys.read_remote_file(f"{base}/privkey.pem")
+        fullchain = fileaccess.read_file(f"{base}/fullchain.pem")
+        privkey = fileaccess.read_file(f"{base}/privkey.pem")
     except VyOSError as e:
         if "No such file" in str(e):
             raise VyOSError(
@@ -481,19 +481,22 @@ def _stage_base_config():
 
 
 def provision_files() -> None:
-    """One-time device-side setup: install our SSH key via the API, then write
-    the entrypoint script and create the ACME dir through SFTP."""
-    from app.services import ssh_keys
-    ssh_keys.install_pubkey()
-    ssh_keys.write_remote_file(_ENTRYPOINT_HOST, _ENTRYPOINT_SCRIPT, mode=0o755)
+    """One-time device-side setup: write the entrypoint script and create the
+    ACME dir. Off-device the entrypoint goes through an SSH key installed via
+    the API; on-device it's a plain local file."""
+    from app.services import fileaccess
+    if not fileaccess.is_on_device():
+        from app.services import ssh_keys
+        ssh_keys.install_pubkey()
+    fileaccess.write_file(_ENTRYPOINT_HOST, _ENTRYPOINT_SCRIPT, mode=0o755)
     # the ACME volume source must exist or the container commit fails
-    ssh_keys.write_remote_file(f"{_ACME_VOLUME_SOURCE}/.keep", "", mode=0o644)
+    fileaccess.write_file(f"{_ACME_VOLUME_SOURCE}/.keep", "", mode=0o644)
 
 
 def _push_geoip_map() -> str:
     """Push the local GeoIP map to the device if it changed; return its md5."""
     import hashlib
-    from app.services import geoip, ssh_keys
+    from app.services import fileaccess, geoip
 
     content = geoip.read_map()
     if content is None:
@@ -503,11 +506,11 @@ def _push_geoip_map() -> str:
         )
     local_md5 = hashlib.md5(content.encode()).hexdigest()
     try:
-        current = ssh_keys.remote_md5(_GEOIP_MAP_HOST)
+        current = fileaccess.file_md5(_GEOIP_MAP_HOST)
     except VyOSError:
         current = None
     if current != local_md5:
-        ssh_keys.write_remote_file(_GEOIP_MAP_HOST, content, mode=0o644)
+        fileaccess.write_file(_GEOIP_MAP_HOST, content, mode=0o644)
     return local_md5
 
 

@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.routers import interfaces, firewall, staging, logs, system, services, nat, haproxy, pki, routes, auth as auth_router
+from app.routers import interfaces, firewall, staging, logs, system, services, nat, haproxy, pki, routes, auth as auth_router, deploy
 from app.services import auth
 
 app = FastAPI(title="VyOS Web Gateway", version="0.2.0")
@@ -42,6 +42,7 @@ app.include_router(nat.router)
 app.include_router(routes.router)
 app.include_router(haproxy.router)
 app.include_router(pki.router)
+app.include_router(deploy.router)
 
 
 @app.get("/api/health")
@@ -51,7 +52,9 @@ def health():
 
 # Serve the built frontend (SPA) when frontend/dist exists; API routes win
 # because they are registered above.
-_DIST = os.path.join(
+from app.config import settings
+
+_DIST = settings.dist_dir or os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
     "frontend", "dist",
 )

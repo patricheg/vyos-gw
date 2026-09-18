@@ -13,9 +13,11 @@ from typing import Optional, Tuple
 
 import paramiko
 
+from app.config import settings
 from app.services.vyos_client import vyos_client, VyOSError
 
-_DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data")
+_DATA_DIR = settings.data_dir or os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data")
 _KEY_PATH = os.path.join(_DATA_DIR, "webui_ssh_key")
 _KEY_ID = "vyos-gw-webui"
 

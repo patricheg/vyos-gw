@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { getSystem, updateSystem, getSystemResources, downloadBackup, restoreBackup } from '../api/client';
+import { getSystem, updateSystem, getSystemResources, downloadBackup, restoreBackup, getDeployStatus, provisionDeploy } from '../api/client';
+import type { DeployStatus } from '../api/client';
 import type { SystemConfig, SystemResources } from '../types';
 import { TIMEZONES } from '../timezones';
 
@@ -69,6 +70,31 @@ export default function SystemPage() {
   const [backupErr, setBackupErr] = useState('');
   const [restoring, setRestoring] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const [deploy, setDeploy] = useState<DeployStatus | null>(null);
+  const [deployMsg, setDeployMsg] = useState('');
+  const [deployErr, setDeployErr] = useState('');
+  const [deploying, setDeploying] = useState(false);
+
+  const loadDeploy = () => {
+    getDeployStatus()
+      .then(s => { setDeploy(s); setDeployErr(''); })
+      .catch(e => setDeployErr('Deploy status: ' + (e.response?.data?.detail || e.message)));
+  };
+
+  const handleProvisionDeploy = async () => {
+    if (!confirm('Build the console image directly on the device? This may take several minutes.')) return;
+    setDeploying(true);
+    setDeployMsg(''); setDeployErr('');
+    try {
+      const r = await provisionDeploy();
+      setDeployMsg(`Image built (build ${r.build}). Staged — press Commit in the pending changes panel, then the UI will be available at http://<router-address>:8001`);
+      loadDeploy();
+    } catch (e: any) {
+      setDeployErr('Deploy failed: ' + (e.response?.data?.detail || e.message));
+    } finally {
+      setDeploying(false);
+    }
+  };
 
   const load = () => {
     setLoading(true);
@@ -85,7 +111,7 @@ export default function SystemPage() {
       .catch(e => setResErr('Resources: ' + (e.response?.data?.detail || e.message)));
   };
 
-  useEffect(() => { load(); loadResources(); }, []);
+  useEffect(() => { load(); loadResources(); loadDeploy(); }, []);
 
   // Poll resource usage while the page is open
   useEffect(() => {
@@ -95,7 +121,7 @@ export default function SystemPage() {
 
   // Reload actual config after staged changes are committed or discarded
   useEffect(() => {
-    const handler = () => load();
+    const handler = () => { load(); loadDeploy(); };
     window.addEventListener('vyos:config-changed', handler);
     return () => window.removeEventListener('vyos:config-changed', handler);
   }, []);
@@ -264,6 +290,58 @@ export default function SystemPage() {
                     onChange={e => { const f = e.target.files?.[0]; if (f) handleRestoreFile(f); }}
                   />
                 </div>
+              </div>
+
+              {/* On-device console */}
+              <div className="mt-6 p-4 bg-gray-800 rounded-lg border border-gray-700">
+                <div className="flex items-center justify-between mb-1">
+                  <h3 className="font-bold">On-device console</h3>
+                  {deploy && (deploy.on_device
+                    ? <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-green-900 text-green-300">running on device</span>
+                    : <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-700 text-gray-300">workstation (SSH) mode</span>)}
+                </div>
+                <p className="text-xs text-gray-500 mb-3">
+                  The app will run as a container on the router itself (no SSH at runtime). Port 8001 must be allowed in the firewall input chain.
+                </p>
+                {deployErr && <div className="mb-2 p-2 bg-red-900/50 rounded border border-red-700 text-sm text-red-200">{deployErr}</div>}
+                {deployMsg && <div className="mb-2 p-2 bg-green-900/50 rounded border border-green-700 text-sm text-green-200">{deployMsg}</div>}
+                {!deploy && !deployErr ? (
+                  <div className="text-sm text-gray-400">Loading…</div>
+                ) : deploy && (
+                  <>
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-400 mb-3">
+                      <span>Container configured: {deploy.container_configured
+                        ? <span className="text-green-400">yes</span>
+                        : <span className="text-gray-500">no</span>}</span>
+                      <span>Image present: {deploy.image_present === null
+                        ? <span className="text-gray-500">n/a</span>
+                        : deploy.image_present
+                          ? <span className="text-green-400">yes</span>
+                          : <span className="text-gray-500">no</span>}</span>
+                      <span>Data seeded: {deploy.data_seeded === null
+                        ? <span className="text-gray-500">n/a</span>
+                        : deploy.data_seeded
+                          ? <span className="text-green-400">yes</span>
+                          : <span className="text-gray-500">no</span>}</span>
+                    </div>
+                    {deploy.on_device ? (
+                      <p className="text-xs text-gray-400">
+                        This console is already running on the device. To update the on-device image, use a workstation instance of the app.
+                      </p>
+                    ) : (
+                      <button
+                        onClick={handleProvisionDeploy}
+                        disabled={deploying}
+                        className="px-3 py-2 bg-blue-600 rounded hover:bg-blue-500 text-white text-sm font-medium disabled:opacity-50 flex items-center gap-2"
+                      >
+                        {deploying && <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/></svg>}
+                        {deploying
+                          ? 'Building on device…'
+                          : deploy.container_configured ? 'Update on-device image' : 'Deploy to this device'}
+                      </button>
+                    )}
+                  </>
+                )}
               </div>
             </>
           )}
