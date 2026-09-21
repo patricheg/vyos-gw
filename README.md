@@ -17,7 +17,7 @@ save
 Затем одна команда:
 
 ```
-curl -sL https://raw.githubusercontent.com/OWNER/vyos-gw/main/bootstrap.sh | sudo bash
+curl -sL https://raw.githubusercontent.com/patricheg/vyos-gw/main/bootstrap.sh | sudo bash
 ```
 
 Скрипт включит HTTPS API (8443), соберёт образ приложения прямо на роутере и поднимет контейнер `vyos-gw`. По завершении веб-консоль доступна на `http://<адрес>:8001` — при первом входе задайте логин/пароль админа.

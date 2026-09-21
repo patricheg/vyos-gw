@@ -2,7 +2,7 @@
 # vyos-gw bootstrap: свежий VyOS -> веб-консоль контейнером на самом роутере.
 #
 # Использование (на консоли VyOS, после настройки IP и default route):
-#   curl -sL https://raw.githubusercontent.com/OWNER/vyos-gw/main/bootstrap.sh | sudo bash
+#   curl -sL https://raw.githubusercontent.com/patricheg/vyos-gw/main/bootstrap.sh | sudo bash
 #
 # Что делает:
 #   1. Включает HTTPS API VyOS на 8443 со случайным ключом
@@ -11,7 +11,7 @@
 #   4. commit + save; печатает URL веб-консоли
 set -euo pipefail
 
-GITHUB_REPO="OWNER/vyos-gw"
+GITHUB_REPO="patricheg/vyos-gw"
 REF="main"
 APP_PORT=8001
 API_PORT=8443
