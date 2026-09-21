@@ -10,6 +10,7 @@
 configure
 set interfaces ethernet eth0 address 192.0.2.10/24
 set protocols static route 0.0.0.0/0 next-hop 192.0.2.1
+set system name-server 8.8.8.8
 commit
 save
 ```

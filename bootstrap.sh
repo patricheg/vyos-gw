@@ -22,6 +22,11 @@ IMAGE="localhost/vyos-gw:local"
 for cmd in curl tar podman openssl; do
     command -v "$cmd" >/dev/null || { echo "Нет команды: $cmd"; exit 1; }
 done
+# DNS нужен и хосту, и сборке (сборка идёт с --network=host)
+getent hosts github.com >/dev/null || {
+    echo "DNS не настроен. Выполни: set system name-server 8.8.8.8 && commit && save"
+    exit 1
+}
 
 # API-ключ: генерируем один раз, дальше переиспользуем
 mkdir -p "$APP_DIR/data"
@@ -41,7 +46,7 @@ SRC="$(find "$TMP" -maxdepth 1 -type d -name 'vyos-gw-*' | head -1)"
 [ -n "$SRC" ] || { echo "Не удалось распаковать исходники"; exit 1; }
 
 echo ">> Собираю образ $IMAGE (первая сборка долгая, 5-10 минут)..."
-podman build -f "$SRC/deploy/Dockerfile" -t "$IMAGE" "$SRC"
+podman build --network=host -f "$SRC/deploy/Dockerfile" -t "$IMAGE" "$SRC"
 
 # Конфигурация VyOS: HTTPS API + контейнер
 echo ">> Настраиваю VyOS API и контейнер..."
