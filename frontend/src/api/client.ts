@@ -144,6 +144,8 @@ export const provisionHaproxy = () =>
 export const migrateHaproxy = () => api.post('/haproxy/migrate').then(r => r.data);
 export const addHaproxyService = (svc: HaproxyService) =>
   api.post('/haproxy/services', svc).then(r => r.data);
+export const createHaproxyAcmeStub = (listen_address: string) =>
+  api.post('/haproxy/acme-stub', { listen_address }).then(r => r.data);
 export const updateHaproxyService = (name: string, svc: HaproxyService) =>
   api.put(`/haproxy/services/${name}`, svc).then(r => r.data);
 export const deleteHaproxyService = (name: string) =>

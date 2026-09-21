@@ -3,7 +3,7 @@ import re
 
 from fastapi import APIRouter, HTTPException
 
-from app.models import HaproxyConfig, HaproxyService, HaproxyBackend, HaproxyGlobals
+from app.models import HaproxyConfig, HaproxyService, HaproxyBackend, HaproxyServer, HaproxyGlobals, HaproxyAcmeStubCreate
 from app.services import haproxy_container, geoip as geoip_service
 from app.services.vyos_client import VyOSError
 
@@ -157,6 +157,59 @@ async def add_service(svc: HaproxyService):
         if missing:
             raise HTTPException(status_code=400, detail=f"Unknown backend(s): {', '.join(missing)}")
     model.services.append(svc)
+    return _apply_or_502(model)
+
+
+_IPV4_RE = re.compile(r"^\d{1,3}(?:\.\d{1,3}){3}$")
+
+
+@router.post("/acme-stub")
+async def acme_stub(data: HaproxyAcmeStubCreate):
+    """One-click HTTP:80 stub for Let's Encrypt: a 'dummy' backend plus an
+    'http' service bound to one concrete address (never *:80 — certbot
+    standalone must be able to bind 127.0.0.1:80). Idempotent: a repeated
+    call just updates the service's listen address."""
+    addr = data.listen_address.strip()
+    if not _IPV4_RE.match(addr) or any(int(octet) > 255 for octet in addr.split(".")):
+        raise HTTPException(status_code=400, detail="listen_address must be a valid IPv4 address")
+
+    model = await asyncio.to_thread(_engine_call, haproxy_container.get_model)
+
+    svc = next((s for s in model.services if s.name == "http"), None)
+    if svc is not None:
+        if svc.ssl_certificate:
+            raise HTTPException(
+                status_code=409,
+                detail="Service 'http' already has an SSL certificate — leaving it untouched",
+            )
+        if svc.port != 80:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Service 'http' already exists on port {svc.port}, not 80 — leaving it untouched",
+            )
+
+    if not any(b.name == "dummy" for b in model.backends):
+        model.backends.append(HaproxyBackend(
+            name="dummy",
+            description="Placeholder backend for the ACME stub service",
+            mode="http",
+            servers=[HaproxyServer(name="blackhole", address="127.0.0.1", port=9)],
+        ))
+
+    if svc is None:
+        model.services.append(HaproxyService(
+            name="http",
+            description="HTTP frontend (ACME HTTP-01 passthrough to certbot)",
+            mode="http",
+            port=80,
+            listen_addresses=[addr],
+            backends=["dummy"],
+            redirect_http_to_https=True,
+            geoip_mode="off",
+        ))
+    else:
+        svc.listen_addresses = [addr]
+
     return _apply_or_502(model)
 
 

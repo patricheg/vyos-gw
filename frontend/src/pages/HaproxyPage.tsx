@@ -3,9 +3,9 @@ import {
   getHaproxy, getHaproxyStatus, provisionHaproxy, migrateHaproxy,
   addHaproxyService, updateHaproxyService, deleteHaproxyService,
   addHaproxyBackend, updateHaproxyBackend, deleteHaproxyBackend,
-  updateHaproxyGlobals,
+  updateHaproxyGlobals, createHaproxyAcmeStub,
   getGeoipStatus, updateGeoipDb,
-  getPki,
+  getPki, getInterfaces,
 } from '../api/client';
 import type { HaproxyStatus } from '../api/client';
 import type { HaproxyConfig, HaproxyService, HaproxyBackend, HaproxyServer, HaproxyServiceRule, GeoipStatus } from '../types';
@@ -91,6 +91,11 @@ export default function HaproxyPage() {
   const [geoip, setGeoip] = useState<GeoipStatus | null>(null);
   const [geoipMsg, setGeoipMsg] = useState('');
   const [geoipErr, setGeoipErr] = useState('');
+
+  const [showAcme, setShowAcme] = useState(false);
+  const [acmeAddrs, setAcmeAddrs] = useState<{ iface: string; ip: string }[]>([]);
+  const [acmeAddr, setAcmeAddr] = useState('');
+  const [acmeErr, setAcmeErr] = useState('');
 
   const toggleSvc = (name: string) => {
     setExpandedSvcs(prev => {
@@ -453,6 +458,44 @@ export default function HaproxyPage() {
     }
   };
 
+  // ─── ACME stub (HTTP:80 for Let's Encrypt) ────────────────────
+
+  const openAcmeStub = () => {
+    setErr(''); setMsg('');
+    setAcmeErr('');
+    setAcmeAddr('');
+    setAcmeAddrs([]);
+    setShowAcme(true);
+    getInterfaces()
+      .then(list => {
+        const opts = list
+          .map(i => ({ iface: i.name, ip: (i.address || '').split('/')[0] }))
+          .filter(o => /^\d{1,3}(\.\d{1,3}){3}$/.test(o.ip) && o.ip !== '127.0.0.1');
+        setAcmeAddrs(opts);
+        if (opts.length > 0) setAcmeAddr(opts[0].ip);
+      })
+      .catch(e => setAcmeErr('Could not load interface addresses: ' + (e.response?.data?.detail || e.message)));
+  };
+
+  const handleAcmeStub = async () => {
+    if (!acmeAddr) {
+      setAcmeErr('Select a listen address');
+      return;
+    }
+    setWorking('acme-stub');
+    setAcmeErr('');
+    try {
+      await createHaproxyAcmeStub(acmeAddr);
+      setMsg(`ACME stub staged: service "http" will listen on ${acmeAddr}:80 — review and commit`);
+      setShowAcme(false);
+      load();
+    } catch (e: any) {
+      setAcmeErr(e.response?.data?.detail || e.message);
+    } finally {
+      setWorking(null);
+    }
+  };
+
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
@@ -571,7 +614,12 @@ export default function HaproxyPage() {
       {/* Services */}
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-lg font-semibold">Services (frontends)</h3>
-        <button onClick={openAddSvc} className="px-3 py-1 bg-blue-600 rounded hover:bg-blue-500 text-sm text-white font-medium">+ Add Service</button>
+        <div className="flex gap-2">
+          <button onClick={openAcmeStub} disabled={working !== null} className="px-3 py-1 bg-gray-700 rounded hover:bg-gray-600 text-sm disabled:opacity-50" title="Create an HTTP:80 stub for Let's Encrypt (certbot) challenges">
+            ACME Stub
+          </button>
+          <button onClick={openAddSvc} className="px-3 py-1 bg-blue-600 rounded hover:bg-blue-500 text-sm text-white font-medium">+ Add Service</button>
+        </div>
       </div>
 
       {loading && cfg.services.length === 0 ? (
@@ -1084,6 +1132,37 @@ export default function HaproxyPage() {
               <button onClick={() => setShowBeForm(false)} disabled={isWorking('save-be')} className="px-4 py-2 rounded bg-gray-700 hover:bg-gray-600 disabled:opacity-50">Cancel</button>
               <button onClick={handleSaveBe} disabled={isWorking('save-be')} className="px-4 py-2 rounded bg-blue-600 hover:bg-blue-500 text-white font-medium disabled:opacity-50">
                 {isWorking('save-be') ? 'Saving…' : editBe !== null ? 'Save Changes' : 'Add Backend'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ACME stub modal */}
+      {showAcme && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+          <div className="bg-gray-800 rounded-xl p-6 w-full max-w-md border border-gray-700 shadow-xl">
+            <h3 className="text-lg font-bold mb-2">ACME stub (Let's Encrypt)</h3>
+            <p className="text-sm text-gray-400 mb-4">
+              Creates an HTTP service on port 80 that passes ACME challenges to certbot
+              and redirects everything else to HTTPS. Pick the public address that
+              receives port-80 traffic. Never binds <code>*:80</code> — certbot needs 127.0.0.1:80.
+            </p>
+            <label className="block text-sm text-gray-400 mb-1">Listen address</label>
+            {acmeAddrs.length > 0 ? (
+              <select value={acmeAddr} onChange={e => setAcmeAddr(e.target.value)} className={inputCls}>
+                {acmeAddrs.map(o => (
+                  <option key={o.ip} value={o.ip}>{o.ip} ({o.iface})</option>
+                ))}
+              </select>
+            ) : (
+              <input value={acmeAddr} onChange={e => setAcmeAddr(e.target.value)} className={inputCls} placeholder="e.g. 203.0.113.10" />
+            )}
+            {acmeErr && <div className="mt-3 p-2 bg-red-900/50 rounded border border-red-700 text-sm text-red-200">{acmeErr}</div>}
+            <div className="flex justify-end gap-2 mt-6">
+              <button onClick={() => setShowAcme(false)} disabled={isWorking('acme-stub')} className="px-4 py-2 rounded bg-gray-700 hover:bg-gray-600 disabled:opacity-50">Cancel</button>
+              <button onClick={handleAcmeStub} disabled={isWorking('acme-stub')} className="px-4 py-2 rounded bg-blue-600 hover:bg-blue-500 text-white font-medium disabled:opacity-50">
+                {isWorking('acme-stub') ? 'Creating…' : 'Create stub'}
               </button>
             </div>
           </div>

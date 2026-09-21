@@ -196,6 +196,9 @@ class HaproxyConfig(HaproxyGlobals):
     services: List[HaproxyService] = []
     backends: List[HaproxyBackend] = []
 
+class HaproxyAcmeStubCreate(BaseModel):
+    listen_address: str           # public IPv4 the HTTP:80 stub binds to (never "*": certbot needs 127.0.0.1:80 free)
+
 # ─── PKI (certificates) ──────────────────────────────────────────
 
 class PkiCertificate(BaseModel):
