@@ -76,6 +76,14 @@ if ! "$TMP/vyos-setup.sh"; then
     exit 1
 fi
 
+# При повторном запуске конфиг контейнера не меняется и commit его не
+# пересоздаст — пересоздаём вручную, чтобы поднялся новый образ
+if podman ps -a --format '{{.Names}}' | grep -qx vyos-gw; then
+    echo ">> Пересоздаю контейнер на новом образе..."
+    podman rm -f vyos-gw >/dev/null
+    systemctl restart vyos-container-vyos-gw || true
+fi
+
 IP="$(ip -4 -o addr show scope global | awk '{split($4,a,"/"); print a[1]}' | head -1)"
 echo ""
 echo "==============================================="
