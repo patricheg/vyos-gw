@@ -1,5 +1,6 @@
 from typing import Optional
 
+from pydantic import Field
 from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
@@ -21,9 +22,9 @@ class Settings(BaseSettings):
     app_port: int = 8000
     # On-device mode: the app runs as a container on the VyOS router itself,
     # file access is local instead of SSH. Set via container env (Dockerfile).
-    on_device: bool = False          # VGW_ON_DEVICE
-    data_dir: Optional[str] = None   # VGW_DATA_DIR (default: backend/data)
-    dist_dir: Optional[str] = None   # VGW_DIST_DIR (default: ../frontend/dist)
+    on_device: bool = Field(default=False, validation_alias="VGW_ON_DEVICE")
+    data_dir: Optional[str] = Field(default=None, validation_alias="VGW_DATA_DIR")
+    dist_dir: Optional[str] = Field(default=None, validation_alias="VGW_DIST_DIR")
 
     class Config:
         env_file = ".env"
