@@ -356,6 +356,45 @@ class VyOSClient:
         rules.sort(key=lambda r: r.number)
         return rules
 
+    def get_source_nat_rules(self) -> List["SourceNatRule"]:
+        """Read `nat source` (masquerade / SNAT) as structured JSON."""
+        from app.models import SourceNatRule
+        try:
+            data = self._post("/retrieve", {"op": "showConfig", "path": ["nat", "source"]})
+        except VyOSError as e:
+            if "empty" in str(e).lower():
+                return []
+            raise
+        cfg = data if isinstance(data, dict) else {}
+        if set(cfg.keys()) == {"source"} and isinstance(cfg["source"], dict):
+            cfg = cfg["source"]
+
+        rules: List[SourceNatRule] = []
+        for num_str, rcfg in (cfg.get("rule") or {}).items():
+            if not isinstance(rcfg, dict):
+                continue
+            source = rcfg.get("source") or {}
+            dest = rcfg.get("destination") or {}
+            translation = rcfg.get("translation") or {}
+            iface = rcfg.get("outbound-interface")
+            if isinstance(iface, dict):
+                iface = iface.get("name")
+            rules.append(SourceNatRule(
+                number=int(num_str),
+                description=rcfg.get("description"),
+                protocol=rcfg.get("protocol"),
+                source_address=source.get("address"),
+                destination_address=dest.get("address"),
+                destination_port=dest.get("port"),
+                outbound_interface=iface if isinstance(iface, str) else None,
+                translation_address=translation.get("address"),
+                translation_port=translation.get("port"),
+                log="log" in rcfg,
+                disabled="disable" in rcfg,
+            ))
+        rules.sort(key=lambda r: r.number)
+        return rules
+
     # ─── Routing ──────────────────────────────────────────────────
 
     def get_routing_table(self) -> List["RouteEntry"]:

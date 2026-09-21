@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { Interface, FirewallRuleset, FirewallRule, LogEntry, SystemConfig, SystemResources, FirewallLogEntry, ServiceInfo, NatRule, HaproxyConfig, HaproxyService, HaproxyBackend, HaproxyGlobals, GeoipStatus, PkiConfig, PkiAcmeCreate, RouteEntry, StaticRoute, AddressGroup } from '../types';
+import type { Interface, FirewallRuleset, FirewallRule, LogEntry, SystemConfig, SystemResources, FirewallLogEntry, ServiceInfo, NatRule, SourceNatRule, HaproxyConfig, HaproxyService, HaproxyBackend, HaproxyGlobals, GeoipStatus, PkiConfig, PkiAcmeCreate, RouteEntry, StaticRoute, AddressGroup } from '../types';
 
 const api = axios.create({
   baseURL: '/api',
@@ -117,6 +117,17 @@ export const deleteNatRule = (number: number) =>
   api.delete(`/nat/destination/rules/${number}`).then(r => r.data);
 export const toggleNatRule = (number: number, disabled: boolean) =>
   api.put(`/nat/destination/rules/${number}/disabled`, { disabled }).then(r => r.data);
+
+// NAT (source / masquerade / SNAT)
+export const getSourceNatRules = () => api.get<SourceNatRule[]>('/nat/source').then(r => r.data);
+export const addSourceNatRule = (rule: SourceNatRule) =>
+  api.post('/nat/source/rules', rule).then(r => r.data);
+export const updateSourceNatRule = (number: number, rule: SourceNatRule) =>
+  api.put(`/nat/source/rules/${number}`, rule).then(r => r.data);
+export const deleteSourceNatRule = (number: number) =>
+  api.delete(`/nat/source/rules/${number}`).then(r => r.data);
+export const toggleSourceNatRule = (number: number, disabled: boolean) =>
+  api.put(`/nat/source/rules/${number}/disabled`, { disabled }).then(r => r.data);
 
 export const getRoutingTable = () => api.get<RouteEntry[]>('/routes/table').then(r => r.data);
 export const getStaticRoutes = () => api.get<StaticRoute[]>('/routes/static').then(r => r.data);

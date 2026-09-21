@@ -116,6 +116,21 @@ export interface NatRule {
   disabled: boolean;
 }
 
+export interface SourceNatRule {
+  number: number;
+  description: string | null;
+  protocol: string | null;
+  source_address: string | null;
+  destination_address: string | null;
+  destination_port: string | null;
+  outbound_interface: string | null;
+  /** "masquerade" or an IPv4 address */
+  translation_address: string | null;
+  translation_port: string | null;
+  log: boolean | null;
+  disabled: boolean;
+}
+
 // HAProxy (load-balancing haproxy)
 export interface HaproxyServer {
   name: string;

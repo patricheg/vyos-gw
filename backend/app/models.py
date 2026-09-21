@@ -80,6 +80,26 @@ class NatRuleCreate(NatRuleBase):
 class NatRule(NatRuleBase):
     pass
 
+class SourceNatRuleBase(BaseModel):
+    number: int
+    description: Optional[str] = None
+    protocol: Optional[str] = None
+    source_address: Optional[str] = None
+    destination_address: Optional[str] = None
+    destination_port: Optional[str] = None
+    outbound_interface: Optional[str] = None
+    # "masquerade" or an IPv4 address
+    translation_address: Optional[str] = None
+    translation_port: Optional[str] = None
+    log: Optional[bool] = None
+    disabled: bool = False
+
+class SourceNatRuleCreate(SourceNatRuleBase):
+    pass
+
+class SourceNatRule(SourceNatRuleBase):
+    pass
+
 # ─── System ──────────────────────────────────────────────────────
 
 class SystemConfig(BaseModel):
