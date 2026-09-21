@@ -58,10 +58,16 @@ def _device_host_port() -> Tuple[str, int]:
 
 
 def _pick_login_user() -> str:
-    data = vyos_client._post("/retrieve", {"op": "showConfig", "path": ["system", "login", "user"]})
-    users = list(data.keys()) if isinstance(data, dict) else []
+    try:
+        data = vyos_client._post("/retrieve", {"op": "showConfig", "path": ["system", "login", "user"]})
+        # the API wraps the result in the last path node: {"user": {"vyos": ...}}
+        if isinstance(data, dict) and set(data.keys()) == {"user"} and isinstance(data["user"], dict):
+            data = data["user"]
+        users = list(data.keys()) if isinstance(data, dict) else []
+    except VyOSError:
+        users = []
     if not users:
-        raise VyOSError("No login users found on the device")
+        return settings.vyos_username  # fresh devices may hide the node from the API
     return "vyos" if "vyos" in users else users[0]
 
 

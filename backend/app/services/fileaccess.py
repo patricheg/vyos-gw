@@ -8,7 +8,7 @@ app.services.ssh_keys. All paths are identical in both modes.
 """
 import hashlib
 import os
-from typing import Optional
+from typing import List, Optional
 
 from app.config import settings
 from app.services.vyos_client import VyOSError
@@ -61,3 +61,30 @@ def ensure_dir(path: str) -> None:
         return
     from app.services import ssh_keys
     ssh_keys.run_remote(f"sudo mkdir -p {path}")
+
+
+def delete_file(path: str) -> None:
+    """Delete a file on the device; no error if it does not exist."""
+    if is_on_device():
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+        return
+    from app.services import ssh_keys
+    ssh_keys.run_remote(f"sudo rm -f {path}")
+
+
+def list_dir(path: str) -> List[str]:
+    """Names of the entries in a device directory; [] if it does not exist."""
+    if is_on_device():
+        try:
+            return os.listdir(path)
+        except OSError:
+            return []
+    from app.services import ssh_keys
+    try:
+        out = ssh_keys.run_remote(f"sudo ls -1 {path}")
+    except VyOSError:
+        return []
+    return [line.strip() for line in out.splitlines() if line.strip()]

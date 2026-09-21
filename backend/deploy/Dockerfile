@@ -1,4 +1,6 @@
 # vyos-gw web console — runs as a container on the VyOS device itself.
+# LEGACY PC-side flow (app.services.ondevice): expects a prebuilt dist.
+# For a self-contained on-router build from the repo root use deploy/Dockerfile.
 # Build context: Dockerfile, requirements.txt, app/ (backend), dist/ (frontend build).
 FROM python:3.12-alpine
 

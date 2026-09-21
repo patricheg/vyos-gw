@@ -1,0 +1,11 @@
+# Build context = repo root (see deploy/Dockerfile). Keep host build artifacts
+# out of the image: frontend/node_modules would overwrite the npm ci result
+# (and carries host-platform binaries), frontend/dist is rebuilt in stage 1.
+.git
+**/node_modules
+**/__pycache__
+frontend/dist
+backend/venv
+backend/data
+*.log
+**/.env

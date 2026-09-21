@@ -2,22 +2,32 @@
 
 HAProxy runs as a VyOS container (podman via `container name haproxy`) instead
 of the built-in `load-balancing haproxy` service. The generated haproxy.cfg,
-the UI model (as JSON) and imported certificates travel inside container
-environment variables stored in config.boot, so everything is managed through
-the regular VyOS API and the staging/commit flow.
+the UI model (JSON) and the referenced certificates are written as plain files
+into /config/auth/haproxy/ on the device (via app.services.fileaccess) and
+mounted read-only into the container at /entrypoint. Earlier revisions shipped
+the same data base64-encoded in container environment variables stored in
+config.boot — multi-KB env values crashed the config parser (cli-shell-api
+`realloc(): invalid next size`), so config.boot now carries only the small
+container definition (image, entrypoint/command, restart, volumes,
+allow-host-networks) plus one 32-char marker.
 
-VyOS forbids quote characters in config values, so the startup script cannot
-be inline: it is written once as a file on the device (via an SSH key
-installed through the API — see app.services.ssh_keys) and mounted read-only
-into the container. ACME (certbot) certificates are read from a mounted volume
-and assembled into PEM files by that entrypoint.
+The marker env var HAPROXY_FILES_MD5 is kept on purpose: the VyOS REST API
+exposes no `restart container` op, so a changing env value is the only way to
+make a commit recreate the container after the files changed (same trick the
+old HAPROXY_GEOIP_MD5 used for the GeoIP map).
 
-Environment variables used:
-  HAPROXY_MODEL          base64(JSON model: services/backends/globals)
-  HAPROXY_CFG            base64(generated haproxy.cfg)
-  HAPROXY_CERT_<name>    base64(PEM cert+key or CA cert) for PKI-stored certs
+Device files (host paths under /config/auth/haproxy, container: /entrypoint):
+  haproxy.cfg       generated config
+  model.json        UI model (services/backends/globals)
+  certs/<name>.pem  PEM cert+key (or CA cert) referenced by the model
+  geoip.map         GeoIP map (written by _push_geoip_map)
+  entrypoint.sh     startup script (written at provision time / on change)
+
+Legacy environment variables (deleted from the device config on apply):
+  HAPROXY_MODEL, HAPROXY_CFG, HAPROXY_CERT_<name>, HAPROXY_GEOIP_MD5
 """
 import base64
+import hashlib
 import json
 import re
 from typing import Any, Dict, List, Optional, Tuple
@@ -28,9 +38,8 @@ from app.services.vyos_client import vyos_client, VyOSError
 
 CONTAINER_NAME = "haproxy"
 IMAGE = "docker.io/library/haproxy:3.0-alpine"
-ENV_MODEL = "HAPROXY_MODEL"
-ENV_CFG = "HAPROXY_CFG"
-ENV_CERT_PREFIX = "HAPROXY_CERT_"
+ENV_MODEL = "HAPROXY_MODEL"  # legacy: read-only fallback for pre-file configs
+ENV_FILES_MD5 = "HAPROXY_FILES_MD5"  # commit recreates the container on change
 _ACME_VOLUME_SOURCE = "/config/auth/letsencrypt"
 _ACME_VOLUME_DEST = "/acme"
 # Without built-in haproxy (used_by is never set) certbot standalone binds
@@ -39,23 +48,27 @@ _ACME_BACKEND_PORT = 80
 _FILES_DIR_HOST = "/config/auth/haproxy"   # persistent + writable by vyattacfg group
 _ENTRYPOINT_HOST = f"{_FILES_DIR_HOST}/entrypoint.sh"
 _ENTRYPOINT_CTR = "/entrypoint/entrypoint.sh"
+_CFG_HOST = f"{_FILES_DIR_HOST}/haproxy.cfg"
+_MODEL_HOST = f"{_FILES_DIR_HOST}/model.json"
+_CERTS_DIR_HOST = f"{_FILES_DIR_HOST}/certs"
 _GEOIP_MAP_HOST = f"{_FILES_DIR_HOST}/geoip.map"
 _GEOIP_MAP_CTR = "/entrypoint/geoip.map"   # "files" volume is mounted at /entrypoint
-ENV_GEOIP_MD5 = "HAPROXY_GEOIP_MD5"
 
 # The official haproxy image runs as the unprivileged "haproxy" user, so all
 # generated files live under /tmp (root filesystem is not writable).
 _CTR_WORKDIR = "/tmp/haproxy"
 
-# Written to the device once at provision time. Decodes config + certs from
-# env, assembles ACME PEMs from the mounted letsencrypt volume, execs haproxy.
+# Written to the device at provision time (and re-written by apply_model when
+# it changes). Reads config + certs from the mounted /entrypoint volume,
+# assembles ACME PEMs from the mounted letsencrypt volume, execs haproxy.
 _ENTRYPOINT_SCRIPT = """#!/bin/sh
 set -e
 mkdir -p /tmp/haproxy/certs
-printf %s "$HAPROXY_CFG" | base64 -d > /tmp/haproxy/haproxy.cfg
-env | grep ^HAPROXY_CERT_ | while read line; do
-  name=$(echo "$line" | cut -d= -f1 | cut -c14-)
-  echo "$line" | cut -d= -f2- | base64 -d > "/tmp/haproxy/certs/${name}.pem"
+cp /entrypoint/haproxy.cfg /tmp/haproxy/haproxy.cfg
+for f in /entrypoint/certs/*.pem; do
+  if [ -f "$f" ]; then
+    cp "$f" /tmp/haproxy/certs/
+  fi
 done
 for d in /acme/live/*; do
   if [ -f "$d/fullchain.pem" ]; then
@@ -66,10 +79,6 @@ exec haproxy -W -db -f /tmp/haproxy/haproxy.cfg
 """
 
 _NAME_SAFE_RE = re.compile(r"[^A-Za-z0-9_]")
-
-
-def _b64(text: str) -> str:
-    return base64.b64encode(text.encode()).decode()
 
 
 def _unb64(text: str) -> str:
@@ -119,28 +128,18 @@ def builtin_config_exists() -> bool:
         return False
 
 
-def _staged_model_b64() -> Optional[str]:
-    """Latest HAPROXY_MODEL value waiting in the staging area, if any."""
-    prefix = f"set container name {CONTAINER_NAME} environment {ENV_MODEL} value "
-    deleted = False
-    value: Optional[str] = None
-    for ch in staging_area.list():
-        cmd = ch.command
-        if cmd.startswith(prefix):
-            value = cmd[len(prefix):].strip().strip("'")
-            deleted = False
-        elif cmd == f"delete container name {CONTAINER_NAME} environment {ENV_MODEL}":
-            deleted = True
-        elif cmd == f"delete container name {CONTAINER_NAME}":
-            deleted = True
-    return None if deleted else value
-
-
 def get_model() -> HaproxyConfig:
-    """Current model: staged env value if there are pending changes, else the
-    live container env, else mirrored from the built-in haproxy config
-    (pre-migration view)."""
-    raw = _staged_model_b64() or _raw_env().get(ENV_MODEL)
+    """Current model: model.json on the device, else the legacy HAPROXY_MODEL
+    env value (pre file-based configs), else mirrored from the built-in
+    haproxy config (pre-migration view)."""
+    from app.services import fileaccess
+    try:
+        raw = fileaccess.read_file(_MODEL_HOST)
+        if raw.strip():
+            return HaproxyConfig(**json.loads(raw))
+    except (VyOSError, ValueError, TypeError):
+        pass
+    raw = _raw_env().get(ENV_MODEL)
     if raw:
         try:
             return HaproxyConfig(**json.loads(_unb64(raw)))
@@ -211,7 +210,7 @@ def geoip_used(model: HaproxyConfig) -> bool:
 
 
 def _pem_ref(name: str, acme: bool) -> str:
-    # all certs (PKI and ACME) arrive via HAPROXY_CERT_* env vars
+    # all certs (PKI and ACME) arrive as files under /config/auth/haproxy/certs
     return f"{_CTR_WORKDIR}/certs/{_env_safe(name)}.pem"
 
 
@@ -377,9 +376,9 @@ def _read_acme_pem(name: str) -> str:
     """Read an issued ACME cert (fullchain+key) from the letsencrypt dir via SSH.
 
     The volume is root:vyattacfg 700, so the unprivileged container cannot read
-    it directly — we ship the PEM through an env var like the PKI certs.
-    sshd often bounces right after a commit, so a successful read is cached
-    locally and the cache is used when SSH is temporarily unreachable.
+    it directly — the PEM is written to /config/auth/haproxy/certs/ like the
+    PKI certs. sshd often bounces right after a commit, so a successful read is
+    cached locally and the cache is used when SSH is temporarily unreachable.
     """
     from app.services import fileaccess, ssh_keys
     base = f"{_ACME_VOLUME_SOURCE}/live/{name}"
@@ -403,11 +402,12 @@ def _read_acme_pem(name: str) -> str:
     return pem
 
 
-def _collect_cert_env(model: HaproxyConfig) -> Tuple[Dict[str, str], Dict[str, bool]]:
-    """Build HAPROXY_CERT_* env values from VyOS PKI; return (env, acme_map)."""
+def _collect_cert_pems(model: HaproxyConfig) -> Tuple[Dict[str, str], Dict[str, bool]]:
+    """Collect PEM files for the certs referenced by the model from VyOS PKI;
+    return ({safe_name: pem}, acme_map)."""
     pki = vyos_client.get_pki()
     acme_map = {c.name: c.acme for c in pki.certificates}
-    env: Dict[str, str] = {}
+    pems: Dict[str, str] = {}
 
     def fetch(path: List[str]) -> Optional[Dict[str, Any]]:
         try:
@@ -418,10 +418,10 @@ def _collect_cert_env(model: HaproxyConfig) -> Tuple[Dict[str, str], Dict[str, b
 
     for svc in model.services:
         for name in [svc.ssl_certificate, *svc.ssl_certificates]:
-            if not name or ENV_CERT_PREFIX + _env_safe(name) in env:
+            if not name or _env_safe(name) in pems:
                 continue
             if acme_map.get(name):
-                env[ENV_CERT_PREFIX + _env_safe(name)] = _read_acme_pem(name)
+                pems[_env_safe(name)] = _read_acme_pem(name)
                 continue
             node = fetch(["pki", "certificate", name]) or {}
             cert_body = node.get("certificate")
@@ -431,7 +431,7 @@ def _collect_cert_env(model: HaproxyConfig) -> Tuple[Dict[str, str], Dict[str, b
                     f"Certificate {name!r} has no private key in VyOS PKI — import it or use an ACME certificate"
                 )
             pem = _pem_wrap("CERTIFICATE", cert_body) + _pem_wrap("PRIVATE KEY", key_body)
-            env[ENV_CERT_PREFIX + _env_safe(name)] = pem
+            pems[_env_safe(name)] = pem
 
     for be in model.backends:
         ca = be.ssl_ca_certificate
@@ -441,9 +441,9 @@ def _collect_cert_env(model: HaproxyConfig) -> Tuple[Dict[str, str], Dict[str, b
         cert_body = node.get("certificate")
         if not cert_body:
             raise VyOSError(f"CA certificate {ca!r} not found in VyOS PKI")
-        env[ENV_CERT_PREFIX + "ca_" + _env_safe(ca)] = _pem_wrap("CERTIFICATE", cert_body)
+        pems["ca_" + _env_safe(ca)] = _pem_wrap("CERTIFICATE", cert_body)
 
-    return env, acme_map
+    return pems, acme_map
 
 
 # ─── Apply (stage container commands) ─────────────────────────────
@@ -493,10 +493,35 @@ def provision_files() -> None:
     fileaccess.write_file(f"{_ACME_VOLUME_SOURCE}/.keep", "", mode=0o644)
 
 
+def _push_text_file(path: str, content: str, mode: int = 0o644) -> str:
+    """Write content to a device file if it changed; return the content md5."""
+    from app.services import fileaccess
+    digest = hashlib.md5(content.encode()).hexdigest()
+    if fileaccess.file_md5(path) != digest:
+        fileaccess.write_file(path, content, mode=mode)
+    return digest
+
+
+def _push_cert_files(cert_pems: Dict[str, str]) -> List[str]:
+    """Write certs/<name>.pem files, drop stale ones; return content md5s.
+
+    Files must be world-readable (0o644): the container entrypoint runs as the
+    unprivileged haproxy user and copies them from the read-only volume.
+    """
+    from app.services import fileaccess
+    wanted = {f"{name}.pem" for name in cert_pems}
+    for fn in fileaccess.list_dir(_CERTS_DIR_HOST):
+        if fn.endswith(".pem") and fn not in wanted:
+            fileaccess.delete_file(f"{_CERTS_DIR_HOST}/{fn}")
+    digests = []
+    for name, pem in sorted(cert_pems.items()):
+        digests.append(_push_text_file(f"{_CERTS_DIR_HOST}/{name}.pem", pem, mode=0o644))
+    return digests
+
+
 def _push_geoip_map() -> str:
     """Push the local GeoIP map to the device if it changed; return its md5."""
-    import hashlib
-    from app.services import fileaccess, geoip
+    from app.services import geoip
 
     content = geoip.read_map()
     if content is None:
@@ -504,46 +529,56 @@ def _push_geoip_map() -> str:
             "GeoIP is enabled but the database is not downloaded yet — "
             "use 'Update GeoIP DB' on the HAProxy page first"
         )
-    local_md5 = hashlib.md5(content.encode()).hexdigest()
-    try:
-        current = fileaccess.file_md5(_GEOIP_MAP_HOST)
-    except VyOSError:
-        current = None
-    if current != local_md5:
-        fileaccess.write_file(_GEOIP_MAP_HOST, content, mode=0o644)
-    return local_md5
+    return _push_text_file(_GEOIP_MAP_HOST, content, mode=0o644)
+
+
+def _ensure_entrypoint() -> None:
+    """Re-write the entrypoint script when it differs (migrates devices that
+    still have the env-decoding version)."""
+    from app.services import fileaccess
+    if fileaccess.file_md5(_ENTRYPOINT_HOST) == hashlib.md5(_ENTRYPOINT_SCRIPT.encode()).hexdigest():
+        return
+    if not fileaccess.is_on_device():
+        from app.services import ssh_keys
+        ssh_keys.install_pubkey()
+    fileaccess.write_file(_ENTRYPOINT_HOST, _ENTRYPOINT_SCRIPT, mode=0o755)
 
 
 def apply_model(model: HaproxyConfig) -> int:
-    """Stage all commands needed to run the given model in the container."""
-    cert_env, acme_map = _collect_cert_env(model)
+    """Write the model files to the device and stage the container config.
+
+    The files take effect on commit: the HAPROXY_FILES_MD5 env marker changes
+    whenever any file changes, and changing a container's env makes the VyOS
+    commit script recreate the container (the REST API has no restart op).
+    """
+    cert_pems, acme_map = _collect_cert_pems(model)
     cfg_text = render_cfg(model, acme_map)
 
-    new_env: Dict[str, str] = {
-        ENV_MODEL: _b64(model.model_dump_json()),
-        ENV_CFG: _b64(cfg_text),
-    }
-    for key, pem in cert_env.items():
-        new_env[key] = _b64(pem)
+    digests = [
+        _push_text_file(_CFG_HOST, cfg_text),
+        _push_text_file(_MODEL_HOST, model.model_dump_json()),
+        *_push_cert_files(cert_pems),
+    ]
     if geoip_used(model):
-        # the env value forces a container restart when only the map changed
-        new_env[ENV_GEOIP_MD5] = _push_geoip_map()
+        digests.append(_push_geoip_map())
+    files_md5 = hashlib.md5("".join(sorted(digests)).encode()).hexdigest()
 
+    _ensure_entrypoint()
     _stage_base_config()
-    env_base = f"set container name {CONTAINER_NAME} environment"
+    env_base = f"container name {CONTAINER_NAME} environment"
     old_env = _raw_env()
+    # drop every legacy env value (the base64 blobs that broke config.boot)
     for key in old_env:
-        if key not in new_env and (key.startswith(ENV_CERT_PREFIX) or key in (ENV_MODEL, ENV_CFG, ENV_GEOIP_MD5)):
+        if key != ENV_FILES_MD5:
             staging_area.add(
-                f"delete container name {CONTAINER_NAME} environment {key}",
-                f"HAProxy container: drop {key}", "haproxy",
+                f"delete {env_base} {key}",
+                f"HAProxy container: drop env {key}", "haproxy",
             )
-    for key, value in new_env.items():
-        if old_env.get(key) != value:
-            staging_area.add(
-                f"{env_base} {key} value {value}",
-                f"HAProxy container: update {key}", "haproxy",
-            )
+    if old_env.get(ENV_FILES_MD5) != files_md5:
+        staging_area.add(
+            f"set {env_base} {ENV_FILES_MD5} value {files_md5}",
+            "HAProxy container: files marker (recreates the container on change)", "haproxy",
+        )
     return 1
 
 

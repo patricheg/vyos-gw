@@ -176,8 +176,8 @@ async def renew_acme():
         output = await asyncio.to_thread(vyos_client.renew_certbot)
     except VyOSError as e:
         raise HTTPException(status_code=502, detail=str(e))
-    # refreshed certs must reach the container: re-stage the model (new env
-    # values) so the next commit restarts haproxy with the renewed PEMs
+    # refreshed certs must reach the container: re-apply the model (rewrites
+    # the PEM files) so the next commit restarts haproxy with the renewed PEMs
     from app.services import haproxy_container
     if haproxy_container.is_provisioned():
         await asyncio.to_thread(haproxy_container.apply_model, haproxy_container.get_model())
