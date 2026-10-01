@@ -168,6 +168,8 @@ export interface HaproxyBackend {
   logging_facility: string | null;
   ssl_no_verify: boolean;
   ssl_ca_certificate: string | null;
+  geoip_mode: 'off' | 'allow' | 'deny' | null;
+  geoip_countries: string[];
   servers: HaproxyServer[];
 }
 

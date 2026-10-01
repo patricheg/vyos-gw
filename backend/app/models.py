@@ -185,6 +185,8 @@ class HaproxyBackend(BaseModel):
     logging_facility: Optional[str] = None   # syslog facility: daemon, local0-7
     ssl_no_verify: bool = False              # re-encrypt to backend, don't verify its cert
     ssl_ca_certificate: Optional[str] = None # re-encrypt to backend, verify against this CA
+    geoip_mode: Optional[Literal["off", "allow", "deny"]] = "off"
+    geoip_countries: List[str] = []          # ISO 3166-1 alpha-2 codes
     servers: List[HaproxyServer] = []
 
 class HaproxyServiceRule(BaseModel):

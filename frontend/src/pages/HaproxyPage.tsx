@@ -66,6 +66,8 @@ const EMPTY_BACKEND: HaproxyBackend = {
   logging_facility: null,
   ssl_no_verify: false,
   ssl_ca_certificate: null,
+  geoip_mode: 'off',
+  geoip_countries: [],
   servers: [{ ...EMPTY_SERVER }],
 };
 
@@ -742,6 +744,14 @@ export default function HaproxyPage() {
                   {b.logging_facility && <span className={`ml-1 align-middle ${TAG.sky}`}>log:{b.logging_facility}</span>}
                   {b.ssl_no_verify && <span className={`ml-1 align-middle ${TAG.orange}`} title="TLS to servers, certificate not verified">TLS!</span>}
                   {b.ssl_ca_certificate && <span className={`ml-1 align-middle ${TAG.emerald}`} title={`TLS to servers, verified by CA ${b.ssl_ca_certificate}`}>TLS</span>}
+                  {b.geoip_mode && b.geoip_mode !== 'off' && (
+                    <span
+                      className={`ml-1 align-middle ${b.geoip_mode === 'allow' ? TAG.amber : TAG.orange}`}
+                      title={`GeoIP ${b.geoip_mode}: ${b.geoip_countries.join(', ') || 'no countries selected'}`}
+                    >
+                      GeoIP: {b.geoip_mode}{b.geoip_countries.length > 0 && ' ' + b.geoip_countries.slice(0, 4).join(',') + (b.geoip_countries.length > 4 ? ',…' : '')}
+                    </span>
+                  )}
                 </div>
                 <div className="whitespace-nowrap">
                   <button onClick={() => openEditBe(b)} className={linkEdit + ' mr-3'}>Edit</button>
@@ -1076,6 +1086,30 @@ export default function HaproxyPage() {
                   </select>
                 </div>
               )}
+              <div className="col-span-2">
+                <label className={labelCls}>
+                  GeoIP restriction <span className="text-slate-500 font-normal">(applies to every service that routes to this backend)</span>
+                </label>
+                <div className="flex items-start gap-2">
+                  <select
+                    value={beForm.geoip_mode || 'off'}
+                    onChange={e => setBeForm({ ...beForm, geoip_mode: e.target.value as 'off' | 'allow' | 'deny' })}
+                    className={inputCls + ' !w-52'}
+                  >
+                    <option value="off">Off</option>
+                    <option value="allow">Allow only selected</option>
+                    <option value="deny">Deny selected</option>
+                  </select>
+                  {beForm.geoip_mode && beForm.geoip_mode !== 'off' && (
+                    <div className="flex-1">
+                      <CountrySelect
+                        value={beForm.geoip_countries}
+                        onChange={codes => setBeForm({ ...beForm, geoip_countries: codes })}
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
 
             <div className="flex items-center justify-between mb-2">

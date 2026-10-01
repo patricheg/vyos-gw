@@ -61,6 +61,7 @@ def _validate_backend(be: HaproxyBackend):
         raise HTTPException(status_code=400, detail="Backend needs at least one server")
     if be.ssl_no_verify and be.ssl_ca_certificate:
         raise HTTPException(status_code=400, detail="SSL: choose either no-verify or a CA certificate, not both")
+    _validate_geoip(be.geoip_mode, be.geoip_countries, f"Backend {be.name!r}")
     for srv in be.servers:
         # Forgiving input: "10.0.0.1:8080" is split into address + port
         if srv.address:

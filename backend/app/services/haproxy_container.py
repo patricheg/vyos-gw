@@ -200,13 +200,16 @@ def pull_image() -> str:
 
 
 def geoip_used(model: HaproxyConfig) -> bool:
-    """True when any service or rule has a GeoIP restriction configured."""
+    """True when any service, rule or backend has a GeoIP restriction."""
     for svc in model.services:
         if svc.geoip_mode in ("allow", "deny") and svc.geoip_countries:
             return True
         if any(r.geoip_mode and r.geoip_countries for r in svc.rules):
             return True
-    return False
+    return any(
+        be.geoip_mode in ("allow", "deny") and be.geoip_countries
+        for be in model.backends
+    )
 
 
 def _pem_ref(name: str, acme: bool) -> str:
@@ -347,6 +350,23 @@ def render_cfg(model: HaproxyConfig, acme_certs: Dict[str, bool]) -> str:
         L.append(f"    balance {balance.get(be.balance or '', be.balance or 'roundrobin')}")
         if be.logging_facility and be.logging_facility != facility:
             L.append(f"    log /dev/log {be.logging_facility} info")
+        # Backend-level GeoIP: enforced no matter which service routed here.
+        if be.geoip_mode in ("allow", "deny") and be.geoip_countries:
+            ccs = " ".join(c.upper() for c in be.geoip_countries)
+            acl = f"geoip_be_{_env_safe(be.name)}_match"
+            if mode == "http":
+                L.append(f"    http-request set-var(txn.geoip_cc) src,map_ip({_GEOIP_MAP_CTR},ZZ)")
+                L.append(f"    acl {acl} var(txn.geoip_cc) -m str {ccs}")
+                if be.geoip_mode == "allow":
+                    L.append(f"    http-request deny deny_status 403 if !{acl}")
+                else:
+                    L.append(f"    http-request deny deny_status 403 if {acl}")
+            else:
+                expr = f"src,map_ip({_GEOIP_MAP_CTR},ZZ) -m str {ccs}"
+                if be.geoip_mode == "allow":
+                    L.append(f"    tcp-request content reject unless {{ {expr} }}")
+                else:
+                    L.append(f"    tcp-request content reject if {{ {expr} }}")
         for srv in be.servers:
             line = f"    server {srv.name} {srv.address}:{srv.port}"
             if srv.check:
