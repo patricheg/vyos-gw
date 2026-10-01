@@ -71,6 +71,26 @@ const EMPTY_BACKEND: HaproxyBackend = {
   servers: [{ ...EMPTY_SERVER }],
 };
 
+function ModalTabs({ tabs, active, onChange }: { tabs: { id: string; label: string }[]; active: string; onChange: (id: string) => void }) {
+  return (
+    <div className="flex gap-1 border-b border-slate-700/60 mb-4">
+      {tabs.map(t => (
+        <button
+          key={t.id}
+          onClick={() => onChange(t.id)}
+          className={`px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+            active === t.id
+              ? 'border-indigo-500 text-indigo-300'
+              : 'border-transparent text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          {t.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export default function HaproxyPage() {
   const [cfg, setCfg] = useState<HaproxyConfig>({ services: [], backends: [], max_connections: null, timeout_client: null, timeout_connect: null, timeout_server: null });
   const [loading, setLoading] = useState(true);
@@ -86,6 +106,8 @@ export default function HaproxyPage() {
   const [beForm, setBeForm] = useState<HaproxyBackend>(EMPTY_BACKEND);
   const [editBe, setEditBe] = useState<string | null>(null);
   const [showBeForm, setShowBeForm] = useState(false);
+  const [svcTab, setSvcTab] = useState('general');
+  const [beTab, setBeTab] = useState('general');
 
   const [globals, setGlobals] = useState({ max_connections: '', timeout_client: '', timeout_connect: '', timeout_server: '' });
   const [showGlobals, setShowGlobals] = useState(false);
@@ -186,6 +208,7 @@ export default function HaproxyPage() {
     setSvcForm(EMPTY_SERVICE);
     setSvcListen('');
     setEditSvc(null);
+    setSvcTab('general');
     setErr(''); setMsg('');
     setShowSvcForm(true);
   };
@@ -200,6 +223,7 @@ export default function HaproxyPage() {
     });
     setSvcListen(s.listen_addresses.join(', '));
     setEditSvc(s.name);
+    setSvcTab('general');
     setErr(''); setMsg('');
     setShowSvcForm(true);
   };
@@ -313,6 +337,7 @@ export default function HaproxyPage() {
   const openAddBe = () => {
     setBeForm({ ...EMPTY_BACKEND, servers: [{ ...EMPTY_SERVER }] });
     setEditBe(null);
+    setBeTab('general');
     setErr(''); setMsg('');
     setShowBeForm(true);
   };
@@ -320,6 +345,7 @@ export default function HaproxyPage() {
   const openEditBe = (b: HaproxyBackend) => {
     setBeForm({ ...b, servers: b.servers.map(s => ({ ...s })) });
     setEditBe(b.name);
+    setBeTab('general');
     setErr(''); setMsg('');
     setShowBeForm(true);
   };
@@ -789,6 +815,17 @@ export default function HaproxyPage() {
             <h3 className={modalTitle}>
               {editSvc !== null ? <>Edit service <span className="text-indigo-400">{editSvc}</span></> : 'New HAProxy Service'}
             </h3>
+            <ModalTabs
+              tabs={[
+                { id: 'general', label: 'General' },
+                { id: 'routing', label: `Routing rules${svcForm.rules.length ? ` (${svcForm.rules.length})` : ''}` },
+                { id: 'tls', label: 'TLS' },
+                { id: 'geoip', label: 'GeoIP' },
+              ]}
+              active={svcTab}
+              onChange={setSvcTab}
+            />
+            {svcTab === 'general' && (
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className={labelCls}>Name</label>
@@ -831,7 +868,22 @@ export default function HaproxyPage() {
                   ))}
                 </div>
               </div>
-              <div className="col-span-2">
+              <div>
+                <label className={labelCls}>Description</label>
+                <input value={svcForm.description || ''} onChange={e => setSvcForm({ ...svcForm, description: e.target.value || null })} className={inputCls} placeholder="Public web frontend" />
+              </div>
+              <div>
+                <label className={labelCls}>Logging facility</label>
+                <select value={svcForm.logging_facility || ''} onChange={e => setSvcForm({ ...svcForm, logging_facility: e.target.value || null })} className={inputCls}>
+                  <option value="">off</option>
+                  {LOG_FACILITIES.map(f => <option key={f} value={f}>{f}</option>)}
+                </select>
+              </div>
+            </div>
+            )}
+            {svcTab === 'routing' && (
+            <div className="grid grid-cols-1 gap-3">
+              <div>
                 <div className="flex items-center justify-between mb-1">
                   <label className="block text-sm text-slate-400">Routing rules</label>
                   <button
@@ -919,7 +971,11 @@ export default function HaproxyPage() {
                   </div>
                 )}
               </div>
-              <div className="col-span-2">
+            </div>
+            )}
+            {svcTab === 'geoip' && (
+            <div className="grid grid-cols-1 gap-3">
+              <div>
                 <label className={labelCls}>GeoIP restriction</label>
                 <div className="flex items-start gap-2">
                   <select
@@ -941,6 +997,10 @@ export default function HaproxyPage() {
                   )}
                 </div>
               </div>
+            </div>
+            )}
+            {svcTab === 'tls' && (
+            <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className={labelCls}>TLS certificate</label>
                 <select
@@ -990,22 +1050,14 @@ export default function HaproxyPage() {
                   </div>
                 )}
               </div>
-              <div>
-                <label className={labelCls}>Logging facility</label>
-                <select value={svcForm.logging_facility || ''} onChange={e => setSvcForm({ ...svcForm, logging_facility: e.target.value || null })} className={inputCls}>
-                  <option value="">off</option>
-                  {LOG_FACILITIES.map(f => <option key={f} value={f}>{f}</option>)}
-                </select>
+              <div className="flex items-end pb-1">
+                <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
+                  <input type="checkbox" checked={svcForm.redirect_http_to_https} onChange={e => setSvcForm({ ...svcForm, redirect_http_to_https: e.target.checked })} className={checkboxCls} />
+                  <span>Redirect HTTP → HTTPS</span>
+                </label>
               </div>
-              <div>
-                <label className={labelCls}>Description</label>
-                <input value={svcForm.description || ''} onChange={e => setSvcForm({ ...svcForm, description: e.target.value || null })} className={inputCls} placeholder="Public web frontend" />
-              </div>
-              <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer self-end pb-2">
-                <input type="checkbox" checked={svcForm.redirect_http_to_https} onChange={e => setSvcForm({ ...svcForm, redirect_http_to_https: e.target.checked })} className={checkboxCls} />
-                <span>Redirect HTTP → HTTPS</span>
-              </label>
             </div>
+            )}
             {err && <div className="mt-4 p-3 rounded-lg bg-rose-500/10 border border-rose-500/30 text-sm text-rose-200">{err}</div>}
             <div className="flex justify-end gap-2 mt-6">
               <button onClick={() => setShowSvcForm(false)} disabled={isWorking('save-svc')} className={btnSecondary}>Cancel</button>
@@ -1024,6 +1076,17 @@ export default function HaproxyPage() {
             <h3 className={modalTitle}>
               {editBe !== null ? <>Edit backend <span className="text-indigo-400">{editBe}</span></> : 'New HAProxy Backend'}
             </h3>
+            <ModalTabs
+              tabs={[
+                { id: 'general', label: 'General' },
+                { id: 'servers', label: `Servers${beForm.servers.length ? ` (${beForm.servers.length})` : ''}` },
+                { id: 'tls', label: 'TLS' },
+                { id: 'geoip', label: 'GeoIP' },
+              ]}
+              active={beTab}
+              onChange={setBeTab}
+            />
+            {beTab === 'general' && (
             <div className="grid grid-cols-3 gap-3 mb-4">
               <div>
                 <label className={labelCls}>Name</label>
@@ -1055,6 +1118,10 @@ export default function HaproxyPage() {
                   {LOG_FACILITIES.map(f => <option key={f} value={f}>{f}</option>)}
                 </select>
               </div>
+            </div>
+            )}
+            {beTab === 'tls' && (
+            <div className="grid grid-cols-2 gap-3 mb-4">
               <div>
                 <label className={labelCls}>Backend TLS (SSL bridging)</label>
                 <select
@@ -1086,7 +1153,11 @@ export default function HaproxyPage() {
                   </select>
                 </div>
               )}
-              <div className="col-span-2">
+            </div>
+            )}
+            {beTab === 'geoip' && (
+            <div className="grid grid-cols-1 gap-3 mb-4">
+              <div>
                 <label className={labelCls}>
                   GeoIP restriction <span className="text-slate-500 font-normal">(applies to every service that routes to this backend)</span>
                 </label>
@@ -1111,7 +1182,10 @@ export default function HaproxyPage() {
                 </div>
               </div>
             </div>
+            )}
 
+            {beTab === 'servers' && (
+            <div>
             <div className="flex items-center justify-between mb-2">
               <label className="text-sm text-slate-400 font-medium">Servers</label>
               <button
@@ -1160,6 +1234,8 @@ export default function HaproxyPage() {
                 </div>
               ))}
             </div>
+            </div>
+            )}
 
             {err && <div className="mt-4 p-3 rounded-lg bg-rose-500/10 border border-rose-500/30 text-sm text-rose-200">{err}</div>}
             <div className="flex justify-end gap-2 mt-6">
