@@ -77,12 +77,16 @@ if ! "$TMP/vyos-setup.sh"; then
 fi
 
 # При повторном запуске конфиг контейнера не меняется и commit его не
-# пересоздаст — пересоздаём вручную, чтобы поднялся новый образ
-if podman ps -a --format '{{.Names}}' | grep -qx vyos-gw; then
-    echo ">> Пересоздаю контейнер на новом образе..."
-    podman rm -f vyos-gw >/dev/null
-    systemctl restart vyos-container-vyos-gw || true
-fi
+# пересоздаст — пересоздаём вручную, чтобы поднялся новый образ.
+# А после reboot podman-storage может быть пуст: контейнера нет в podman,
+# но unit из конфига существует — restart создаст контейнер заново.
+echo ">> Запускаю контейнер..."
+podman rm -f vyos-gw >/dev/null 2>&1 || true
+systemctl restart vyos-container-vyos-gw
+sleep 3
+podman ps --format '{{.Names}} {{.Status}}' | grep -q '^vyos-gw Up' \
+    && echo ">> Контейнер vyos-gw запущен" \
+    || { echo "!! Контейнер не поднялся, лог:"; podman logs vyos-gw 2>&1 | tail -10; exit 1; }
 
 IP="$(ip -4 -o addr show scope global | awk '{split($4,a,"/"); print a[1]}' | head -1)"
 echo ""
