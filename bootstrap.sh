@@ -5,7 +5,7 @@
 #   curl -sL https://raw.githubusercontent.com/patricheg/vyos-gw/main/bootstrap.sh | sudo bash
 #
 # Что делает:
-#   1. Включает HTTPS API VyOS на 8443 со случайным ключом
+#   1. Включает HTTPS API VyOS на 8443 со случайным ключом (только localhost)
 #   2. Скачивает исходники из GitHub и собирает образ podman на роутере
 #   3. Прописывает контейнер vyos-gw в конфиг (автозапуск, host network)
 #   4. commit + save; печатает URL веб-консоли
@@ -57,6 +57,9 @@ configure
 set service https api rest
 set service https api keys id vyos-gw key $API_KEY
 set service https port $API_PORT
+# API слушает только loopback — веб-консоль ходит на него из контейнера
+# через host networking, снаружи API недоступен
+set service https listen-address 127.0.0.1
 set container name vyos-gw image $IMAGE
 set container name vyos-gw allow-host-networks
 set container name vyos-gw restart always
