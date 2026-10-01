@@ -6,22 +6,28 @@ import {
   createAcmeCertificate, renewAcmeCertificates,
 } from '../api/client';
 import type { PkiConfig } from '../types';
+import {
+  pageTitle, sectionTitle, btnSecondarySm, btnPrimary, btnPrimarySm, btnSecondary, btnSuccessSm, btnWarningSm,
+  inputCls, labelCls, TAG, badgeRed, badgeAmber, badgeGreen,
+  tableWrap, tableCls, theadCls, thCls, tbodyCls, trHover,
+  alertErr, alertOk, modalOverlay, modalCard, modalTitle,
+  linkEdit, linkDelete, linkPlain, hintBox, emptyBox,
+} from '../ui';
 
-const inputCls = 'w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded focus:outline-none focus:border-blue-500';
 const textareaCls = inputCls + ' font-mono text-xs h-32 resize-y';
 
 function expiryBadge(days: number | null, notAfter: string | null) {
-  if (days === null) return <span className="text-gray-500">-</span>;
+  if (days === null) return <span className="text-slate-500">-</span>;
   const cls = days < 0
-    ? 'bg-red-900 text-red-300'
+    ? badgeRed
     : days < 14
-      ? 'bg-red-900/70 text-red-300'
+      ? badgeRed
       : days < 30
-        ? 'bg-yellow-900 text-yellow-300'
-        : 'bg-emerald-900 text-emerald-300';
+        ? badgeAmber
+        : badgeGreen;
   const label = days < 0 ? `expired ${-days}d ago` : `${days}d left`;
   return (
-    <span title={notAfter || ''} className={`px-1.5 py-0.5 rounded text-[11px] font-medium ${cls}`}>{label}</span>
+    <span title={notAfter || ''} className={cls}>{label}</span>
   );
 }
 
@@ -235,72 +241,72 @@ export default function CertificatesPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-2xl font-bold">Certificates (PKI)</h2>
-        <div className="flex gap-2">
-          <button onClick={load} disabled={loading} className="px-3 py-1 bg-gray-700 rounded hover:bg-gray-600 text-sm disabled:opacity-50">
+      <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+        <h2 className={pageTitle}>Certificates (PKI)</h2>
+        <div className="flex gap-2 flex-wrap">
+          <button onClick={load} disabled={loading} className={btnSecondarySm}>
             {loading ? 'Refreshing…' : 'Refresh'}
           </button>
-          <button onClick={() => { setShowAcme(true); setErr(''); setMsg(''); }} className="px-3 py-1 bg-green-700 rounded hover:bg-green-600 text-sm text-white font-medium">
+          <button onClick={() => { setShowAcme(true); setErr(''); setMsg(''); }} className={btnSuccessSm}>
             + Let's Encrypt
           </button>
-          <button onClick={() => { setShowImport(true); setErr(''); setMsg(''); }} className="px-3 py-1 bg-blue-600 rounded hover:bg-blue-500 text-sm text-white font-medium">
+          <button onClick={() => { setShowImport(true); setErr(''); setMsg(''); }} className={btnPrimarySm}>
             + Import Certificate
           </button>
-          <button onClick={() => { setShowCaImport(true); setErr(''); setMsg(''); }} className="px-3 py-1 bg-indigo-600 rounded hover:bg-indigo-500 text-sm text-white font-medium">
+          <button onClick={() => { setShowCaImport(true); setErr(''); setMsg(''); }} className={btnSecondarySm}>
             + Import CA
           </button>
           {hasAcme && (
-            <button onClick={handleRenew} disabled={isWorking('renew')} className="px-3 py-1 bg-yellow-700 rounded hover:bg-yellow-600 text-sm text-white disabled:opacity-50">
+            <button onClick={handleRenew} disabled={isWorking('renew')} className={btnWarningSm}>
               {isWorking('renew') ? 'Renewing…' : 'Renew LE now'}
             </button>
           )}
         </div>
       </div>
 
-      {err && <div className="mb-4 p-3 bg-red-900/50 rounded border border-red-700 text-sm text-red-200 whitespace-pre-wrap">{err}</div>}
-      {msg && <div className="mb-4 p-3 bg-green-900/50 rounded border border-green-700 text-sm text-green-200">{msg}</div>}
+      {err && <div className={alertErr + ' whitespace-pre-wrap'}>{err}</div>}
+      {msg && <div className={alertOk}>{msg}</div>}
 
       {/* Certificates */}
-      <h3 className="text-lg font-semibold mb-3">Certificates</h3>
+      <h3 className={sectionTitle + ' mb-3'}>Certificates</h3>
       {loading && cfg.certificates.length === 0 ? (
-        <div className="text-gray-400 mb-6">Loading…</div>
+        <div className="text-slate-400 mb-6">Loading…</div>
       ) : cfg.certificates.length === 0 ? (
-        <div className="mb-6 p-6 border border-dashed border-gray-600 rounded-lg text-center text-gray-400">
+        <div className={emptyBox + ' mb-6'}>
           No certificates yet. Import one or request a Let's Encrypt certificate.
         </div>
       ) : (
-        <div className="overflow-x-auto mb-6">
-          <table className="w-full text-left border border-gray-700 rounded-lg overflow-hidden">
-            <thead className="bg-gray-800">
+        <div className={tableWrap + ' mb-6'}>
+          <table className={tableCls}>
+            <thead className={theadCls}>
               <tr>
-                <th className="px-4 py-3">Name</th>
-                <th className="px-4 py-3">Subject CN</th>
-                <th className="px-4 py-3">Issuer</th>
-                <th className="px-4 py-3">Expiry</th>
-                <th className="px-4 py-3">Info</th>
-                <th className="px-4 py-3"></th>
+                <th className={thCls}>Name</th>
+                <th className={thCls}>Subject CN</th>
+                <th className={thCls}>Issuer</th>
+                <th className={thCls}>Expiry</th>
+                <th className={thCls}>Info</th>
+                <th className={thCls}></th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-700">
+            <tbody className={tbodyCls}>
               {cfg.certificates.map(c => (
-                <tr key={c.name} className="hover:bg-gray-800/50">
-                  <td className="px-4 py-2.5 font-mono text-blue-300">{c.name}</td>
-                  <td className="px-4 py-2.5 text-sm">{c.subject || <span className="text-gray-500">not issued yet</span>}</td>
-                  <td className="px-4 py-2.5 text-sm text-gray-400">{c.issuer || '-'}</td>
+                <tr key={c.name} className={trHover}>
+                  <td className="px-4 py-2.5 font-mono text-indigo-300">{c.name}</td>
+                  <td className="px-4 py-2.5 text-sm text-slate-200">{c.subject || <span className="text-slate-500">not issued yet</span>}</td>
+                  <td className="px-4 py-2.5 text-sm text-slate-400">{c.issuer || '-'}</td>
                   <td className="px-4 py-2.5">{expiryBadge(c.expires_in_days, c.not_after)}</td>
                   <td className="px-4 py-2.5 text-xs">
-                    {c.acme && <span className="mr-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-green-900 text-green-300" title={`ACME: ${c.acme_domains.join(', ')}`}>ACME</span>}
-                    {c.has_private_key && <span className="mr-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-900 text-amber-300">KEY</span>}
-                    {c.revoked && <span className="mr-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-red-900 text-red-300">REVOKED</span>}
-                    {c.sans.length > 0 && <span className="text-gray-500" title={c.sans.join(', ')}>+{c.sans.length} SAN</span>}
+                    {c.acme && <span className={`mr-1 ${TAG.emerald}`} title={`ACME: ${c.acme_domains.join(', ')}`}>ACME</span>}
+                    {c.has_private_key && <span className={`mr-1 ${TAG.amber}`}>KEY</span>}
+                    {c.revoked && <span className={`mr-1 ${TAG.red}`}>REVOKED</span>}
+                    {c.sans.length > 0 && <span className="text-slate-500" title={c.sans.join(', ')}>+{c.sans.length} SAN</span>}
                   </td>
                   <td className="px-4 py-2.5 text-right whitespace-nowrap">
-                    <button onClick={() => handleView(c.name)} disabled={isWorking('view-' + c.name)} className="text-gray-300 hover:text-white text-sm mr-3 disabled:opacity-50">
+                    <button onClick={() => handleView(c.name)} disabled={isWorking('view-' + c.name)} className={linkPlain + ' mr-3'}>
                       {isWorking('view-' + c.name) ? '…' : 'View'}
                     </button>
-                    <button onClick={() => handleExport(c.name)} className="text-blue-400 hover:text-blue-300 text-sm mr-3">Export</button>
-                    <button onClick={() => handleDelete(c.name)} disabled={isWorking('del-' + c.name)} className="text-red-400 hover:text-red-300 text-sm disabled:opacity-50">
+                    <button onClick={() => handleExport(c.name)} className={linkEdit + ' mr-3'}>Export</button>
+                    <button onClick={() => handleDelete(c.name)} disabled={isWorking('del-' + c.name)} className={linkDelete}>
                       {isWorking('del-' + c.name) ? '…' : 'Del'}
                     </button>
                   </td>
@@ -312,35 +318,35 @@ export default function CertificatesPage() {
       )}
 
       {/* CA certificates */}
-      <h3 className="text-lg font-semibold mb-3">Certificate Authorities</h3>
+      <h3 className={sectionTitle + ' mb-3'}>Certificate Authorities</h3>
       {cfg.ca_certificates.length === 0 ? (
-        <div className="p-6 border border-dashed border-gray-600 rounded-lg text-center text-gray-400">
+        <div className={emptyBox}>
           No CA certificates.
         </div>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border border-gray-700 rounded-lg overflow-hidden">
-            <thead className="bg-gray-800">
+        <div className={tableWrap}>
+          <table className={tableCls}>
+            <thead className={theadCls}>
               <tr>
-                <th className="px-4 py-3">Name</th>
-                <th className="px-4 py-3">Subject</th>
-                <th className="px-4 py-3">Issuer</th>
-                <th className="px-4 py-3">Expiry</th>
-                <th className="px-4 py-3">Description</th>
-                <th className="px-4 py-3"></th>
+                <th className={thCls}>Name</th>
+                <th className={thCls}>Subject</th>
+                <th className={thCls}>Issuer</th>
+                <th className={thCls}>Expiry</th>
+                <th className={thCls}>Description</th>
+                <th className={thCls}></th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-700">
+            <tbody className={tbodyCls}>
               {cfg.ca_certificates.map(c => (
-                <tr key={c.name} className="hover:bg-gray-800/50">
+                <tr key={c.name} className={trHover}>
                   <td className="px-4 py-2.5 font-mono text-indigo-300">{c.name}</td>
-                  <td className="px-4 py-2.5 text-sm">{c.subject || '-'}</td>
-                  <td className="px-4 py-2.5 text-sm text-gray-400">{c.issuer || '-'}</td>
+                  <td className="px-4 py-2.5 text-sm text-slate-200">{c.subject || '-'}</td>
+                  <td className="px-4 py-2.5 text-sm text-slate-400">{c.issuer || '-'}</td>
                   <td className="px-4 py-2.5">{expiryBadge(c.expires_in_days, c.not_after)}</td>
-                  <td className="px-4 py-2.5 text-sm text-gray-400">{c.description || '-'}</td>
+                  <td className="px-4 py-2.5 text-sm text-slate-400">{c.description || '-'}</td>
                   <td className="px-4 py-2.5 text-right whitespace-nowrap">
-                    <button onClick={() => handleExportCa(c.name)} className="text-blue-400 hover:text-blue-300 text-sm mr-3">Export</button>
-                    <button onClick={() => handleDeleteCa(c.name)} disabled={isWorking('del-ca-' + c.name)} className="text-red-400 hover:text-red-300 text-sm disabled:opacity-50">
+                    <button onClick={() => handleExportCa(c.name)} className={linkEdit + ' mr-3'}>Export</button>
+                    <button onClick={() => handleDeleteCa(c.name)} disabled={isWorking('del-ca-' + c.name)} className={linkDelete}>
                       {isWorking('del-ca-' + c.name) ? '…' : 'Del'}
                     </button>
                   </td>
@@ -353,32 +359,32 @@ export default function CertificatesPage() {
 
       {/* Import certificate modal */}
       {showImport && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-          <div className="bg-gray-800 rounded-xl p-6 w-full max-w-xl border border-gray-700 shadow-xl">
-            <h3 className="text-lg font-bold mb-4">Import Certificate</h3>
+        <div className={modalOverlay}>
+          <div className={modalCard + ' max-w-xl'}>
+            <h3 className={modalTitle}>Import Certificate</h3>
             <div className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm text-gray-400 mb-1">Name</label>
+                  <label className={labelCls}>Name</label>
                   <input value={importForm.name} onChange={e => setImportForm({ ...importForm, name: e.target.value })} className={inputCls} placeholder="my-cert" />
                 </div>
                 <div>
-                  <label className="block text-sm text-gray-400 mb-1">Description</label>
+                  <label className={labelCls}>Description</label>
                   <input value={importForm.description} onChange={e => setImportForm({ ...importForm, description: e.target.value })} className={inputCls} placeholder="optional" />
                 </div>
               </div>
               <div>
-                <label className="block text-sm text-gray-400 mb-1">Certificate (PEM)</label>
+                <label className={labelCls}>Certificate (PEM)</label>
                 <textarea value={importForm.certificate} onChange={e => setImportForm({ ...importForm, certificate: e.target.value })} className={textareaCls} placeholder="-----BEGIN CERTIFICATE-----&#10;…&#10;-----END CERTIFICATE-----" />
               </div>
               <div>
-                <label className="block text-sm text-gray-400 mb-1">Private key (PEM, optional)</label>
+                <label className={labelCls}>Private key (PEM, optional)</label>
                 <textarea value={importForm.private_key} onChange={e => setImportForm({ ...importForm, private_key: e.target.value })} className={textareaCls} placeholder="-----BEGIN PRIVATE KEY-----&#10;…&#10;-----END PRIVATE KEY-----" />
               </div>
             </div>
             <div className="flex justify-end gap-2 mt-6">
-              <button onClick={() => setShowImport(false)} disabled={isWorking('import')} className="px-4 py-2 rounded bg-gray-700 hover:bg-gray-600 disabled:opacity-50">Cancel</button>
-              <button onClick={handleImport} disabled={isWorking('import')} className="px-4 py-2 rounded bg-blue-600 hover:bg-blue-500 text-white font-medium disabled:opacity-50">
+              <button onClick={() => setShowImport(false)} disabled={isWorking('import')} className={btnSecondary}>Cancel</button>
+              <button onClick={handleImport} disabled={isWorking('import')} className={btnPrimary}>
                 {isWorking('import') ? 'Importing…' : 'Import'}
               </button>
             </div>
@@ -388,28 +394,28 @@ export default function CertificatesPage() {
 
       {/* Import CA modal */}
       {showCaImport && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-          <div className="bg-gray-800 rounded-xl p-6 w-full max-w-xl border border-gray-700 shadow-xl">
-            <h3 className="text-lg font-bold mb-4">Import CA Certificate</h3>
+        <div className={modalOverlay}>
+          <div className={modalCard + ' max-w-xl'}>
+            <h3 className={modalTitle}>Import CA Certificate</h3>
             <div className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm text-gray-400 mb-1">Name</label>
+                  <label className={labelCls}>Name</label>
                   <input value={caForm.name} onChange={e => setCaForm({ ...caForm, name: e.target.value })} className={inputCls} placeholder="my-ca" />
                 </div>
                 <div>
-                  <label className="block text-sm text-gray-400 mb-1">Description</label>
+                  <label className={labelCls}>Description</label>
                   <input value={caForm.description} onChange={e => setCaForm({ ...caForm, description: e.target.value })} className={inputCls} placeholder="optional" />
                 </div>
               </div>
               <div>
-                <label className="block text-sm text-gray-400 mb-1">CA Certificate (PEM)</label>
+                <label className={labelCls}>CA Certificate (PEM)</label>
                 <textarea value={caForm.certificate} onChange={e => setCaForm({ ...caForm, certificate: e.target.value })} className={textareaCls} placeholder="-----BEGIN CERTIFICATE-----&#10;…&#10;-----END CERTIFICATE-----" />
               </div>
             </div>
             <div className="flex justify-end gap-2 mt-6">
-              <button onClick={() => setShowCaImport(false)} disabled={isWorking('import-ca')} className="px-4 py-2 rounded bg-gray-700 hover:bg-gray-600 disabled:opacity-50">Cancel</button>
-              <button onClick={handleImportCa} disabled={isWorking('import-ca')} className="px-4 py-2 rounded bg-indigo-600 hover:bg-indigo-500 text-white font-medium disabled:opacity-50">
+              <button onClick={() => setShowCaImport(false)} disabled={isWorking('import-ca')} className={btnSecondary}>Cancel</button>
+              <button onClick={handleImportCa} disabled={isWorking('import-ca')} className={btnPrimary}>
                 {isWorking('import-ca') ? 'Importing…' : 'Import CA'}
               </button>
             </div>
@@ -419,28 +425,28 @@ export default function CertificatesPage() {
 
       {/* ACME / Let's Encrypt modal */}
       {showAcme && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-          <div className="bg-gray-800 rounded-xl p-6 w-full max-w-lg border border-gray-700 shadow-xl">
-            <h3 className="text-lg font-bold mb-4">New Let's Encrypt Certificate</h3>
+        <div className={modalOverlay}>
+          <div className={modalCard}>
+            <h3 className={modalTitle}>New Let's Encrypt Certificate</h3>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-sm text-gray-400 mb-1">Name</label>
+                <label className={labelCls}>Name</label>
                 <input value={acmeForm.name} onChange={e => setAcmeForm({ ...acmeForm, name: e.target.value })} className={inputCls} placeholder="le-web" />
               </div>
               <div>
-                <label className="block text-sm text-gray-400 mb-1">Email</label>
+                <label className={labelCls}>Email</label>
                 <input value={acmeForm.email} onChange={e => setAcmeForm({ ...acmeForm, email: e.target.value })} className={inputCls} placeholder="admin@example.com" />
               </div>
               <div className="col-span-2">
-                <label className="block text-sm text-gray-400 mb-1">Domains (comma-separated)</label>
+                <label className={labelCls}>Domains (comma-separated)</label>
                 <input value={acmeForm.domains} onChange={e => setAcmeForm({ ...acmeForm, domains: e.target.value })} className={inputCls} placeholder="gw.example.com, www.example.com" />
               </div>
               <div>
-                <label className="block text-sm text-gray-400 mb-1">Listen address (optional)</label>
+                <label className={labelCls}>Listen address (optional)</label>
                 <input value={acmeForm.listen_address} onChange={e => setAcmeForm({ ...acmeForm, listen_address: e.target.value })} className={inputCls} placeholder="router IP for HTTP-01" />
               </div>
               <div>
-                <label className="block text-sm text-gray-400 mb-1">RSA key size</label>
+                <label className={labelCls}>RSA key size</label>
                 <select value={acmeForm.rsa_key_size} onChange={e => setAcmeForm({ ...acmeForm, rsa_key_size: Number(e.target.value) })} className={inputCls}>
                   <option value={2048}>2048</option>
                   <option value={3072}>3072</option>
@@ -448,21 +454,21 @@ export default function CertificatesPage() {
                 </select>
               </div>
               <div className="col-span-2">
-                <label className="block text-sm text-gray-400 mb-1">ACME directory URL (optional)</label>
+                <label className={labelCls}>ACME directory URL (optional)</label>
                 <input value={acmeForm.url} onChange={e => setAcmeForm({ ...acmeForm, url: e.target.value })} className={inputCls} placeholder="default: https://acme-v02.api.letsencrypt.org/directory" />
               </div>
               <div className="col-span-2">
-                <label className="block text-sm text-gray-400 mb-1">Description</label>
+                <label className={labelCls}>Description</label>
                 <input value={acmeForm.description} onChange={e => setAcmeForm({ ...acmeForm, description: e.target.value })} className={inputCls} placeholder="optional" />
               </div>
             </div>
-            <p className="mt-3 text-xs text-yellow-300/80">
+            <p className="mt-3 text-xs text-amber-300/80">
               Commit runs certbot on the router: the domain must resolve to the router and port 80 must accept
               connections from the Internet. If the challenge fails, the commit fails.
             </p>
             <div className="flex justify-end gap-2 mt-4">
-              <button onClick={() => setShowAcme(false)} disabled={isWorking('acme')} className="px-4 py-2 rounded bg-gray-700 hover:bg-gray-600 disabled:opacity-50">Cancel</button>
-              <button onClick={handleAcme} disabled={isWorking('acme')} className="px-4 py-2 rounded bg-green-700 hover:bg-green-600 text-white font-medium disabled:opacity-50">
+              <button onClick={() => setShowAcme(false)} disabled={isWorking('acme')} className={btnSecondary}>Cancel</button>
+              <button onClick={handleAcme} disabled={isWorking('acme')} className={btnSuccessSm + ' !px-4 !py-2 !text-sm'}>
                 {isWorking('acme') ? 'Staging…' : 'Create'}
               </button>
             </div>
@@ -472,19 +478,19 @@ export default function CertificatesPage() {
 
       {/* View certificate text modal */}
       {viewName && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-          <div className="bg-gray-800 rounded-xl p-6 w-full max-w-3xl border border-gray-700 shadow-xl max-h-[85vh] flex flex-col">
-            <h3 className="text-lg font-bold mb-4">Certificate <span className="text-blue-400">{viewName}</span></h3>
-            <pre className="flex-1 overflow-auto p-3 bg-gray-900 rounded border border-gray-700 text-xs text-gray-300 whitespace-pre-wrap">{viewText}</pre>
+        <div className={modalOverlay}>
+          <div className={modalCard + ' max-w-3xl max-h-[85vh] flex flex-col'}>
+            <h3 className={modalTitle}>Certificate <span className="text-indigo-400">{viewName}</span></h3>
+            <pre className="flex-1 overflow-auto p-3 bg-slate-900 rounded-lg border border-slate-700 text-xs text-slate-300 whitespace-pre-wrap">{viewText}</pre>
             <div className="flex justify-end mt-4">
-              <button onClick={() => setViewName(null)} className="px-4 py-2 rounded bg-gray-700 hover:bg-gray-600">Close</button>
+              <button onClick={() => setViewName(null)} className={btnSecondary}>Close</button>
             </div>
           </div>
         </div>
       )}
 
-      <div className="mt-6 p-3 bg-gray-800/80 rounded border border-gray-700 text-sm text-gray-300">
-        <strong className="text-white">Let's Encrypt note:</strong> committing an ACME certificate makes the router run
+      <div className={hintBox}>
+        <strong className="text-slate-100">Let's Encrypt note:</strong> committing an ACME certificate makes the router run
         certbot immediately — the domain must point to the router and port <strong>80 must be reachable from the Internet</strong>
         (HTTP-01 challenge; don't forget an input-chain firewall rule). VyOS renews ACME certificates automatically.
       </div>

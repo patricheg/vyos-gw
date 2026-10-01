@@ -2,8 +2,12 @@ import { useEffect, useState } from 'react';
 import { getNatRules, addNatRule, updateNatRule, deleteNatRule, toggleNatRule, getInterfaces, getSourceNatRules, addSourceNatRule, updateSourceNatRule, deleteSourceNatRule, toggleSourceNatRule, getNatCounters, getAddressGroups } from '../api/client';
 import type { NatRule, SourceNatRule, NatCounters, AddressGroup, RuleCounterMap } from '../types';
 import { humanCount, humanBytes } from '../format';
-
-const inputCls = 'w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded focus:outline-none focus:border-blue-500';
+import {
+  pageTitle, btnSecondarySm, btnPrimary, btnPrimarySm, btnSecondary, inputCls, labelCls,
+  TAG, tableWrap, tableCls, theadCls, thCls, tbodyCls, trHover,
+  alertErr, alertOk, modalOverlay, modalCard, modalTitle,
+  linkEdit, linkDelete, linkEnable, linkDisable, loadingRow, spinner, hintBox, emptyBox, checkboxCls,
+} from '../ui';
 
 const EMPTY_RULE: NatRule = {
   number: 10,
@@ -167,68 +171,68 @@ export default function NatPage() {
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-2xl font-bold">NAT — Port Forwarding</h2>
+        <h2 className={pageTitle}>NAT — Port Forwarding</h2>
         <div className="flex gap-2">
-          <button onClick={load} disabled={loading} className="px-3 py-1 bg-gray-700 rounded hover:bg-gray-600 text-sm disabled:opacity-50">
+          <button onClick={load} disabled={loading} className={btnSecondarySm}>
             {loading ? 'Refreshing…' : 'Refresh'}
           </button>
-          <button onClick={openAdd} className="px-3 py-1 bg-blue-600 rounded hover:bg-blue-500 text-sm text-white font-medium">
+          <button onClick={openAdd} className={btnPrimarySm}>
             + Add Rule
           </button>
         </div>
       </div>
 
-      {err && <div className="mb-4 p-3 bg-red-900/50 rounded border border-red-700 text-sm text-red-200">{err}</div>}
-      {msg && <div className="mb-4 p-3 bg-green-900/50 rounded border border-green-700 text-sm text-green-200">{msg}</div>}
+      {err && <div className={alertErr}>{err}</div>}
+      {msg && <div className={alertOk}>{msg}</div>}
 
       {loading && rules.length === 0 ? (
-        <div className="flex items-center gap-2 text-gray-400">
-          <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/></svg>
+        <div className={loadingRow}>
+          <svg className={spinner} viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/></svg>
           Loading NAT rules…
         </div>
       ) : rules.length === 0 ? (
-        <div className="p-6 border border-dashed border-gray-600 rounded-lg text-center text-gray-400">
+        <div className={emptyBox}>
           <p className="mb-2">No port-forwarding rules yet.</p>
-          <button onClick={openAdd} className="px-4 py-2 bg-blue-600 rounded hover:bg-blue-500 text-white text-sm">Create your first rule</button>
+          <button onClick={openAdd} className={btnPrimarySm}>Create your first rule</button>
         </div>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border border-gray-700 rounded-lg overflow-hidden">
-            <thead className="bg-gray-800">
+        <div className={tableWrap}>
+          <table className={tableCls}>
+            <thead className={theadCls}>
               <tr>
-                <th className="px-4 py-3">#</th>
-                <th className="px-4 py-3">Inbound Iface</th>
-                <th className="px-4 py-3">Proto</th>
-                <th className="px-4 py-3">Destination</th>
-                <th className="px-4 py-3">→ Translation</th>
-                <th className="px-4 py-3">Description</th>
-                <th className="px-4 py-3">Packets</th>
-                <th className="px-4 py-3"></th>
+                <th className={thCls}>#</th>
+                <th className={thCls}>Inbound Iface</th>
+                <th className={thCls}>Proto</th>
+                <th className={thCls}>Destination</th>
+                <th className={thCls}>→ Translation</th>
+                <th className={thCls}>Description</th>
+                <th className={thCls}>Packets</th>
+                <th className={thCls}></th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-700">
+            <tbody className={tbodyCls}>
               {rules.map(r => {
                 const counter = counters.destination[String(r.number)];
                 return (
-                <tr key={r.number} className={`hover:bg-gray-800/50 ${r.disabled ? 'opacity-50' : ''}`}>
-                  <td className="px-4 py-2.5 font-mono text-gray-300">{r.number}</td>
-                  <td className="px-4 py-2.5 font-mono text-sm">{r.inbound_interface || 'any'}</td>
-                  <td className="px-4 py-2.5 text-sm">{r.protocol || 'all'}</td>
-                  <td className="px-4 py-2.5 font-mono text-xs">
+                <tr key={r.number} className={`${trHover} ${r.disabled ? 'opacity-50' : ''}`}>
+                  <td className="px-4 py-2.5 font-mono text-slate-300">{r.number}</td>
+                  <td className="px-4 py-2.5 font-mono text-sm text-slate-300">{r.inbound_interface || 'any'}</td>
+                  <td className="px-4 py-2.5 text-sm text-slate-300">{r.protocol || 'all'}</td>
+                  <td className="px-4 py-2.5 font-mono text-xs text-slate-300">
                     {r.destination_address_group
                       ? <span className="text-violet-300">@{r.destination_address_group}</span>
                       : r.destination_address || 'any'}{r.destination_port ? `:${r.destination_port}` : ''}
                   </td>
-                  <td className="px-4 py-2.5 font-mono text-xs text-green-300">
+                  <td className="px-4 py-2.5 font-mono text-xs text-emerald-300">
                     {r.translation_address || '-'}{r.translation_port ? `:${r.translation_port}` : ''}
                   </td>
-                  <td className="px-4 py-2.5 text-sm text-gray-400">
+                  <td className="px-4 py-2.5 text-sm text-slate-400">
                     {r.description || '-'}
-                    {r.log && <span className="ml-2 px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-900 text-blue-300 align-middle">LOG</span>}
-                    {r.disabled && <span className="ml-2 px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-700 text-gray-400 align-middle">OFF</span>}
+                    {r.log && <span className={`ml-2 align-middle ${TAG.indigo}`}>LOG</span>}
+                    {r.disabled && <span className={`ml-2 align-middle ${TAG.slate}`}>OFF</span>}
                   </td>
                   <td
-                    className="px-4 py-2.5 font-mono text-xs text-gray-500 whitespace-nowrap"
+                    className="px-4 py-2.5 font-mono text-xs text-slate-500 whitespace-nowrap"
                     title={counter ? `${counter.packets.toLocaleString()} packets / ${counter.bytes.toLocaleString()} bytes` : undefined}
                   >
                     {counter ? `${humanCount(counter.packets)} / ${humanBytes(counter.bytes)}` : ''}
@@ -238,12 +242,12 @@ export default function NatPage() {
                       onClick={() => handleToggle(r)}
                       disabled={isWorking('toggle-' + r.number)}
                       title={r.disabled ? 'Enable rule' : 'Disable rule'}
-                      className={`text-sm mr-3 disabled:opacity-50 ${r.disabled ? 'text-green-400 hover:text-green-300' : 'text-yellow-400 hover:text-yellow-300'}`}
+                      className={(r.disabled ? linkEnable : linkDisable) + ' mr-3'}
                     >
                       {isWorking('toggle-' + r.number) ? '…' : r.disabled ? 'Enable' : 'Disable'}
                     </button>
-                    <button onClick={() => openEdit(r)} className="text-blue-400 hover:text-blue-300 text-sm mr-3">Edit</button>
-                    <button onClick={() => handleDelete(r.number)} disabled={isWorking('del-' + r.number)} className="text-red-400 hover:text-red-300 text-sm disabled:opacity-50">
+                    <button onClick={() => openEdit(r)} className={linkEdit + ' mr-3'}>Edit</button>
+                    <button onClick={() => handleDelete(r.number)} disabled={isWorking('del-' + r.number)} className={linkDelete}>
                       {isWorking('del-' + r.number) ? '…' : 'Del'}
                     </button>
                   </td>
@@ -256,18 +260,18 @@ export default function NatPage() {
       )}
 
       {showForm && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-          <div className="bg-gray-800 rounded-xl p-6 w-full max-w-lg border border-gray-700 shadow-xl">
-            <h3 className="text-lg font-bold mb-4">
-              {editNumber !== null ? <>Edit NAT rule <span className="text-blue-400">#{editNumber}</span></> : 'New Port Forward'}
+        <div className={modalOverlay}>
+          <div className={modalCard}>
+            <h3 className={modalTitle}>
+              {editNumber !== null ? <>Edit NAT rule <span className="text-indigo-400">#{editNumber}</span></> : 'New Port Forward'}
             </h3>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-sm text-gray-400 mb-1">Rule Number</label>
+                <label className={labelCls}>Rule Number</label>
                 <input type="number" value={form.number} onChange={e => setForm({ ...form, number: Number(e.target.value) })} className={inputCls} />
               </div>
               <div>
-                <label className="block text-sm text-gray-400 mb-1">Protocol</label>
+                <label className={labelCls}>Protocol</label>
                 <select value={form.protocol || 'tcp'} onChange={e => setForm({ ...form, protocol: e.target.value })} className={inputCls}>
                   <option value="tcp">TCP</option>
                   <option value="udp">UDP</option>
@@ -276,14 +280,14 @@ export default function NatPage() {
                 </select>
               </div>
               <div>
-                <label className="block text-sm text-gray-400 mb-1">Inbound Interface</label>
+                <label className={labelCls}>Inbound Interface</label>
                 <select value={form.inbound_interface || ''} onChange={e => setForm({ ...form, inbound_interface: e.target.value || null })} className={inputCls}>
                   <option value="">any</option>
                   {ifaceNames.map(n => <option key={n} value={n}>{n}</option>)}
                 </select>
               </div>
               <div>
-                <label className="block text-sm text-gray-400 mb-1">Source Address</label>
+                <label className={labelCls}>Source Address</label>
                 <select value={srcKind} onChange={e => {
                   const k = e.target.value as 'address' | 'group';
                   setSrcKind(k);
@@ -302,7 +306,7 @@ export default function NatPage() {
                 )}
               </div>
               <div>
-                <label className="block text-sm text-gray-400 mb-1">Destination Address</label>
+                <label className={labelCls}>Destination Address</label>
                 <select value={dstKind} onChange={e => {
                   const k = e.target.value as 'address' | 'group';
                   setDstKind(k);
@@ -321,29 +325,29 @@ export default function NatPage() {
                 )}
               </div>
               <div>
-                <label className="block text-sm text-gray-400 mb-1">Destination Port</label>
+                <label className={labelCls}>Destination Port</label>
                 <input value={form.destination_port || ''} onChange={e => setForm({ ...form, destination_port: e.target.value || null })} className={inputCls} placeholder="80" />
               </div>
               <div>
-                <label className="block text-sm text-gray-400 mb-1">Translation Address</label>
+                <label className={labelCls}>Translation Address</label>
                 <input value={form.translation_address || ''} onChange={e => setForm({ ...form, translation_address: e.target.value || null })} className={inputCls} placeholder="192.168.1.10" />
               </div>
               <div>
-                <label className="block text-sm text-gray-400 mb-1">Translation Port</label>
+                <label className={labelCls}>Translation Port</label>
                 <input value={form.translation_port || ''} onChange={e => setForm({ ...form, translation_port: e.target.value || null })} className={inputCls} placeholder="8080" />
               </div>
               <div className="col-span-2">
-                <label className="block text-sm text-gray-400 mb-1">Description</label>
+                <label className={labelCls}>Description</label>
                 <input value={form.description || ''} onChange={e => setForm({ ...form, description: e.target.value || null })} className={inputCls} placeholder="Web server" />
               </div>
-              <label className="col-span-2 flex items-center gap-2 text-sm cursor-pointer">
-                <input type="checkbox" checked={form.log ?? false} onChange={e => setForm({ ...form, log: e.target.checked })} />
+              <label className="col-span-2 flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
+                <input type="checkbox" checked={form.log ?? false} onChange={e => setForm({ ...form, log: e.target.checked })} className={checkboxCls} />
                 <span>Log matching packets</span>
               </label>
             </div>
             <div className="flex justify-end gap-2 mt-6">
-              <button onClick={() => setShowForm(false)} disabled={isWorking('save')} className="px-4 py-2 rounded bg-gray-700 hover:bg-gray-600 disabled:opacity-50">Cancel</button>
-              <button onClick={handleSave} disabled={isWorking('save')} className="px-4 py-2 rounded bg-blue-600 hover:bg-blue-500 text-white font-medium disabled:opacity-50">
+              <button onClick={() => setShowForm(false)} disabled={isWorking('save')} className={btnSecondary}>Cancel</button>
+              <button onClick={handleSave} disabled={isWorking('save')} className={btnPrimary}>
                 {isWorking('save') ? 'Saving…' : editNumber !== null ? 'Save Changes' : 'Add Rule'}
               </button>
             </div>
@@ -353,8 +357,8 @@ export default function NatPage() {
 
       <SourceNatSection ifaceNames={ifaceNames} counters={counters.source} groups={groups} />
 
-      <div className="mt-6 p-3 bg-gray-800/80 rounded border border-gray-700 text-sm text-gray-300">
-        <strong className="text-white">Destination NAT (port forwarding):</strong> incoming traffic to
+      <div className={hintBox}>
+        <strong className="text-slate-100">Destination NAT (port forwarding):</strong> incoming traffic to
         <em> destination address:port</em> on the chosen inbound interface is redirected to the
         <em> translation address:port</em>. Don't forget a matching <strong>forward</strong>-chain firewall rule.
       </div>
@@ -512,76 +516,76 @@ function SourceNatSection({ ifaceNames, counters, groups }: { ifaceNames: string
   return (
     <div className="mt-10">
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-2xl font-bold">NAT — Source NAT (Masquerade)</h2>
+        <h2 className={pageTitle}>NAT — Source NAT (Masquerade)</h2>
         <div className="flex gap-2">
-          <button onClick={load} disabled={loading} className="px-3 py-1 bg-gray-700 rounded hover:bg-gray-600 text-sm disabled:opacity-50">
+          <button onClick={load} disabled={loading} className={btnSecondarySm}>
             {loading ? 'Refreshing…' : 'Refresh'}
           </button>
-          <button onClick={openAdd} className="px-3 py-1 bg-blue-600 rounded hover:bg-blue-500 text-sm text-white font-medium">
+          <button onClick={openAdd} className={btnPrimarySm}>
             + Add Rule
           </button>
         </div>
       </div>
 
-      {err && <div className="mb-4 p-3 bg-red-900/50 rounded border border-red-700 text-sm text-red-200">{err}</div>}
-      {msg && <div className="mb-4 p-3 bg-green-900/50 rounded border border-green-700 text-sm text-green-200">{msg}</div>}
+      {err && <div className={alertErr}>{err}</div>}
+      {msg && <div className={alertOk}>{msg}</div>}
 
       {loading && rules.length === 0 ? (
-        <div className="flex items-center gap-2 text-gray-400">
-          <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/></svg>
+        <div className={loadingRow}>
+          <svg className={spinner} viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/></svg>
           Loading SNAT rules…
         </div>
       ) : rules.length === 0 ? (
-        <div className="p-6 border border-dashed border-gray-600 rounded-lg text-center text-gray-400">
+        <div className={emptyBox}>
           <p className="mb-2">No source NAT rules yet.</p>
-          <button onClick={openAdd} className="px-4 py-2 bg-blue-600 rounded hover:bg-blue-500 text-white text-sm">Create your first rule</button>
+          <button onClick={openAdd} className={btnPrimarySm}>Create your first rule</button>
         </div>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border border-gray-700 rounded-lg overflow-hidden">
-            <thead className="bg-gray-800">
+        <div className={tableWrap}>
+          <table className={tableCls}>
+            <thead className={theadCls}>
               <tr>
-                <th className="px-4 py-3">#</th>
-                <th className="px-4 py-3">Outbound Iface</th>
-                <th className="px-4 py-3">Proto</th>
-                <th className="px-4 py-3">Source</th>
-                <th className="px-4 py-3">Destination</th>
-                <th className="px-4 py-3">→ Translation</th>
-                <th className="px-4 py-3">Description</th>
-                <th className="px-4 py-3">Packets</th>
-                <th className="px-4 py-3"></th>
+                <th className={thCls}>#</th>
+                <th className={thCls}>Outbound Iface</th>
+                <th className={thCls}>Proto</th>
+                <th className={thCls}>Source</th>
+                <th className={thCls}>Destination</th>
+                <th className={thCls}>→ Translation</th>
+                <th className={thCls}>Description</th>
+                <th className={thCls}>Packets</th>
+                <th className={thCls}></th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-700">
+            <tbody className={tbodyCls}>
               {rules.map(r => {
                 const counter = counters[String(r.number)];
                 return (
-                <tr key={r.number} className={`hover:bg-gray-800/50 ${r.disabled ? 'opacity-50' : ''}`}>
-                  <td className="px-4 py-2.5 font-mono text-gray-300">{r.number}</td>
-                  <td className="px-4 py-2.5 font-mono text-sm">{r.outbound_interface || 'any'}</td>
-                  <td className="px-4 py-2.5 text-sm">{r.protocol || 'all'}</td>
-                  <td className="px-4 py-2.5 font-mono text-xs">
+                <tr key={r.number} className={`${trHover} ${r.disabled ? 'opacity-50' : ''}`}>
+                  <td className="px-4 py-2.5 font-mono text-slate-300">{r.number}</td>
+                  <td className="px-4 py-2.5 font-mono text-sm text-slate-300">{r.outbound_interface || 'any'}</td>
+                  <td className="px-4 py-2.5 text-sm text-slate-300">{r.protocol || 'all'}</td>
+                  <td className="px-4 py-2.5 font-mono text-xs text-slate-300">
                     {r.source_address_group
                       ? <span className="text-violet-300">@{r.source_address_group}</span>
                       : r.source_address || 'any'}
                   </td>
-                  <td className="px-4 py-2.5 font-mono text-xs">
+                  <td className="px-4 py-2.5 font-mono text-xs text-slate-300">
                     {r.destination_address_group
                       ? <span className="text-violet-300">@{r.destination_address_group}</span>
                       : r.destination_address || 'any'}{r.destination_port ? `:${r.destination_port}` : ''}
                   </td>
-                  <td className="px-4 py-2.5 font-mono text-xs text-green-300">
+                  <td className="px-4 py-2.5 font-mono text-xs text-emerald-300">
                     {r.translation_address === 'masquerade'
-                      ? <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-purple-900 text-purple-300 align-middle">MASQUERADE</span>
+                      ? <span className={`align-middle ${TAG.purple}`}>MASQUERADE</span>
                       : r.translation_address || '-'}
                   </td>
-                  <td className="px-4 py-2.5 text-sm text-gray-400">
+                  <td className="px-4 py-2.5 text-sm text-slate-400">
                     {r.description || '-'}
-                    {r.log && <span className="ml-2 px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-900 text-blue-300 align-middle">LOG</span>}
-                    {r.disabled && <span className="ml-2 px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-700 text-gray-400 align-middle">OFF</span>}
+                    {r.log && <span className={`ml-2 align-middle ${TAG.indigo}`}>LOG</span>}
+                    {r.disabled && <span className={`ml-2 align-middle ${TAG.slate}`}>OFF</span>}
                   </td>
                   <td
-                    className="px-4 py-2.5 font-mono text-xs text-gray-500 whitespace-nowrap"
+                    className="px-4 py-2.5 font-mono text-xs text-slate-500 whitespace-nowrap"
                     title={counter ? `${counter.packets.toLocaleString()} packets / ${counter.bytes.toLocaleString()} bytes` : undefined}
                   >
                     {counter ? `${humanCount(counter.packets)} / ${humanBytes(counter.bytes)}` : ''}
@@ -591,12 +595,12 @@ function SourceNatSection({ ifaceNames, counters, groups }: { ifaceNames: string
                       onClick={() => handleToggle(r)}
                       disabled={isWorking('toggle-' + r.number)}
                       title={r.disabled ? 'Enable rule' : 'Disable rule'}
-                      className={`text-sm mr-3 disabled:opacity-50 ${r.disabled ? 'text-green-400 hover:text-green-300' : 'text-yellow-400 hover:text-yellow-300'}`}
+                      className={(r.disabled ? linkEnable : linkDisable) + ' mr-3'}
                     >
                       {isWorking('toggle-' + r.number) ? '…' : r.disabled ? 'Enable' : 'Disable'}
                     </button>
-                    <button onClick={() => openEdit(r)} className="text-blue-400 hover:text-blue-300 text-sm mr-3">Edit</button>
-                    <button onClick={() => handleDelete(r.number)} disabled={isWorking('del-' + r.number)} className="text-red-400 hover:text-red-300 text-sm disabled:opacity-50">
+                    <button onClick={() => openEdit(r)} className={linkEdit + ' mr-3'}>Edit</button>
+                    <button onClick={() => handleDelete(r.number)} disabled={isWorking('del-' + r.number)} className={linkDelete}>
                       {isWorking('del-' + r.number) ? '…' : 'Del'}
                     </button>
                   </td>
@@ -609,18 +613,18 @@ function SourceNatSection({ ifaceNames, counters, groups }: { ifaceNames: string
       )}
 
       {showForm && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-          <div className="bg-gray-800 rounded-xl p-6 w-full max-w-lg border border-gray-700 shadow-xl">
-            <h3 className="text-lg font-bold mb-4">
-              {editNumber !== null ? <>Edit SNAT rule <span className="text-blue-400">#{editNumber}</span></> : 'New Source NAT Rule'}
+        <div className={modalOverlay}>
+          <div className={modalCard}>
+            <h3 className={modalTitle}>
+              {editNumber !== null ? <>Edit SNAT rule <span className="text-indigo-400">#{editNumber}</span></> : 'New Source NAT Rule'}
             </h3>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-sm text-gray-400 mb-1">Rule Number</label>
+                <label className={labelCls}>Rule Number</label>
                 <input type="number" value={form.number} onChange={e => setForm({ ...form, number: Number(e.target.value) })} className={inputCls} />
               </div>
               <div>
-                <label className="block text-sm text-gray-400 mb-1">Protocol</label>
+                <label className={labelCls}>Protocol</label>
                 <select value={form.protocol || 'all'} onChange={e => setForm({ ...form, protocol: e.target.value })} className={inputCls}>
                   <option value="all">all</option>
                   <option value="tcp">TCP</option>
@@ -629,14 +633,14 @@ function SourceNatSection({ ifaceNames, counters, groups }: { ifaceNames: string
                 </select>
               </div>
               <div>
-                <label className="block text-sm text-gray-400 mb-1">Outbound Interface</label>
+                <label className={labelCls}>Outbound Interface</label>
                 <select value={form.outbound_interface || ''} onChange={e => setForm({ ...form, outbound_interface: e.target.value || null })} className={inputCls}>
                   <option value="">any</option>
                   {ifaceNames.map(n => <option key={n} value={n}>{n}</option>)}
                 </select>
               </div>
               <div>
-                <label className="block text-sm text-gray-400 mb-1">Source Address</label>
+                <label className={labelCls}>Source Address</label>
                 <select value={srcKind} onChange={e => {
                   const k = e.target.value as 'address' | 'group';
                   setSrcKind(k);
@@ -655,7 +659,7 @@ function SourceNatSection({ ifaceNames, counters, groups }: { ifaceNames: string
                 )}
               </div>
               <div>
-                <label className="block text-sm text-gray-400 mb-1">Destination Address</label>
+                <label className={labelCls}>Destination Address</label>
                 <select value={dstKind} onChange={e => {
                   const k = e.target.value as 'address' | 'group';
                   setDstKind(k);
@@ -674,11 +678,11 @@ function SourceNatSection({ ifaceNames, counters, groups }: { ifaceNames: string
                 )}
               </div>
               <div>
-                <label className="block text-sm text-gray-400 mb-1">Destination Port</label>
+                <label className={labelCls}>Destination Port</label>
                 <input value={form.destination_port || ''} onChange={e => setForm({ ...form, destination_port: e.target.value || null })} className={inputCls} placeholder="any" />
               </div>
               <div>
-                <label className="block text-sm text-gray-400 mb-1">Translation</label>
+                <label className={labelCls}>Translation</label>
                 <select
                   value={translationMode}
                   onChange={e => setForm({ ...form, translation_address: e.target.value === 'masquerade' ? 'masquerade' : '' })}
@@ -689,27 +693,27 @@ function SourceNatSection({ ifaceNames, counters, groups }: { ifaceNames: string
                 </select>
               </div>
               <div>
-                <label className="block text-sm text-gray-400 mb-1">Translation Address</label>
+                <label className={labelCls}>Translation Address</label>
                 <input
                   value={translationMode === 'masquerade' ? '' : form.translation_address || ''}
                   onChange={e => setForm({ ...form, translation_address: e.target.value || null })}
                   disabled={translationMode === 'masquerade'}
-                  className={inputCls + ' disabled:opacity-50'}
+                  className={inputCls}
                   placeholder="203.0.113.5"
                 />
               </div>
               <div className="col-span-2">
-                <label className="block text-sm text-gray-400 mb-1">Description</label>
+                <label className={labelCls}>Description</label>
                 <input value={form.description || ''} onChange={e => setForm({ ...form, description: e.target.value || null })} className={inputCls} placeholder="LAN to WAN masquerade" />
               </div>
-              <label className="col-span-2 flex items-center gap-2 text-sm cursor-pointer">
-                <input type="checkbox" checked={form.log ?? false} onChange={e => setForm({ ...form, log: e.target.checked })} />
+              <label className="col-span-2 flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
+                <input type="checkbox" checked={form.log ?? false} onChange={e => setForm({ ...form, log: e.target.checked })} className={checkboxCls} />
                 <span>Log matching packets</span>
               </label>
             </div>
             <div className="flex justify-end gap-2 mt-6">
-              <button onClick={() => setShowForm(false)} disabled={isWorking('save')} className="px-4 py-2 rounded bg-gray-700 hover:bg-gray-600 disabled:opacity-50">Cancel</button>
-              <button onClick={handleSave} disabled={isWorking('save')} className="px-4 py-2 rounded bg-blue-600 hover:bg-blue-500 text-white font-medium disabled:opacity-50">
+              <button onClick={() => setShowForm(false)} disabled={isWorking('save')} className={btnSecondary}>Cancel</button>
+              <button onClick={handleSave} disabled={isWorking('save')} className={btnPrimary}>
                 {isWorking('save') ? 'Saving…' : editNumber !== null ? 'Save Changes' : 'Add Rule'}
               </button>
             </div>
@@ -717,8 +721,8 @@ function SourceNatSection({ ifaceNames, counters, groups }: { ifaceNames: string
         </div>
       )}
 
-      <div className="mt-6 p-3 bg-gray-800/80 rounded border border-gray-700 text-sm text-gray-300">
-        <strong className="text-white">Source NAT (masquerade / SNAT):</strong> outgoing traffic from
+      <div className={hintBox}>
+        <strong className="text-slate-100">Source NAT (masquerade / SNAT):</strong> outgoing traffic from
         <em> source address</em> leaving via the chosen outbound interface gets its source rewritten to
         <em> translation address</em>. Use <strong>masquerade</strong> to let LAN hosts reach the internet.
       </div>

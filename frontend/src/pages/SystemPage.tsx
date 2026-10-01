@@ -3,13 +3,17 @@ import { getSystem, updateSystem, getSystemResources, downloadBackup, restoreBac
 import type { DeployStatus } from '../api/client';
 import type { SystemConfig, SystemResources } from '../types';
 import { TIMEZONES } from '../timezones';
-
-const inputCls = 'w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded focus:outline-none focus:border-blue-500';
+import {
+  pageTitle, btnSecondarySm, btnPrimary, btnSecondary, btnDanger,
+  inputCls, labelCls, hintText, TAG,
+  alertErr, alertOk, modalOverlay, modalCard, modalTitle,
+  cardPad, spinnerSm,
+} from '../ui';
 
 function Bar({ pct, color }: { pct: number; color: string }) {
   return (
-    <div className="w-full h-2 bg-gray-700 rounded overflow-hidden">
-      <div className={`h-full rounded ${color}`} style={{ width: `${Math.min(100, Math.max(0, pct))}%` }} />
+    <div className="w-full h-2 bg-slate-700/70 rounded-full overflow-hidden">
+      <div className={`h-full rounded-full ${color}`} style={{ width: `${Math.min(100, Math.max(0, pct))}%` }} />
     </div>
   );
 }
@@ -31,15 +35,15 @@ function ListEditor({ label, values, placeholder, onChange }: {
 
   return (
     <div>
-      <label className="block text-sm text-gray-400 mb-1">{label}</label>
+      <label className={labelCls}>{label}</label>
       <div className="flex flex-wrap items-center gap-1.5 mb-2">
         {values.map(v => (
-          <span key={v} className="inline-flex items-center gap-1 px-2 py-0.5 bg-gray-700 rounded text-xs font-mono text-gray-200">
+          <span key={v} className="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-900 border border-slate-700 rounded-lg text-xs font-mono text-slate-200">
             {v}
-            <button type="button" onClick={() => onChange(values.filter(x => x !== v))} className="text-red-400 hover:text-red-300">×</button>
+            <button type="button" onClick={() => onChange(values.filter(x => x !== v))} className="text-rose-400 hover:text-rose-300">×</button>
           </span>
         ))}
-        {values.length === 0 && <span className="text-xs text-gray-500">none</span>}
+        {values.length === 0 && <span className="text-xs text-slate-500">none</span>}
       </div>
       <div className="flex gap-2">
         <input
@@ -49,7 +53,7 @@ function ListEditor({ label, values, placeholder, onChange }: {
           className={inputCls}
           placeholder={placeholder}
         />
-        <button type="button" onClick={add} className="px-3 py-2 bg-gray-700 rounded hover:bg-gray-600 text-sm whitespace-nowrap">Add</button>
+        <button type="button" onClick={add} className={btnSecondary + ' whitespace-nowrap text-sm'}>Add</button>
       </div>
     </div>
   );
@@ -205,33 +209,33 @@ export default function SystemPage() {
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-2xl font-bold">System</h2>
-        <button onClick={() => { load(); loadResources(); }} disabled={loading} className="px-3 py-1 bg-gray-700 rounded hover:bg-gray-600 text-sm disabled:opacity-50">
+        <h2 className={pageTitle}>System</h2>
+        <button onClick={() => { load(); loadResources(); }} disabled={loading} className={btnSecondarySm}>
           Refresh
         </button>
       </div>
 
-      {err && <div className="mb-4 p-3 bg-red-900/50 rounded border border-red-700 text-sm text-red-200">{err}</div>}
-      {msg && <div className="mb-4 p-3 bg-green-900/50 rounded border border-green-700 text-sm text-green-200">{msg}</div>}
+      {err && <div className={alertErr}>{err}</div>}
+      {msg && <div className={alertOk}>{msg}</div>}
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_380px] items-start">
         {/* Settings */}
         <div>
           {loading ? (
-            <div className="text-sm text-gray-400">Loading system config…</div>
+            <div className="text-sm text-slate-400">Loading system config…</div>
           ) : (
             <>
-              <div className="space-y-4 p-4 bg-gray-800 rounded-lg border border-gray-700">
+              <div className={cardPad + ' space-y-4'}>
                 <div>
-                  <label className="block text-sm text-gray-400 mb-1">Hostname</label>
+                  <label className={labelCls}>Hostname</label>
                   <input value={form.host_name || ''} onChange={e => setForm({ ...form, host_name: e.target.value || null })} className={inputCls} placeholder="router" />
                 </div>
                 <div>
-                  <label className="block text-sm text-gray-400 mb-1">Domain search</label>
+                  <label className={labelCls}>Domain search</label>
                   <input value={form.domain_search || ''} onChange={e => setForm({ ...form, domain_search: e.target.value || null })} className={inputCls} placeholder="example.local" />
                 </div>
                 <div>
-                  <label className="block text-sm text-gray-400 mb-1">Timezone</label>
+                  <label className={labelCls}>Timezone</label>
                   <select
                     value={tzSelectValue}
                     onChange={e => {
@@ -258,7 +262,7 @@ export default function SystemPage() {
                       autoFocus
                     />
                   )}
-                  <p className="text-xs text-gray-500 mt-1">IANA name, e.g. UTC or Europe/Moscow</p>
+                  <p className={hintText}>IANA name, e.g. UTC or Europe/Moscow</p>
                 </div>
                 <ListEditor
                   label="DNS servers"
@@ -275,32 +279,32 @@ export default function SystemPage() {
               </div>
 
               <div className="flex justify-end mt-4">
-                <button onClick={save} disabled={saving} className="px-4 py-2 rounded bg-blue-600 hover:bg-blue-500 text-white font-medium disabled:opacity-50 flex items-center gap-2">
-                  {saving && <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/></svg>}
+                <button onClick={save} disabled={saving} className={btnPrimary}>
+                  {saving && <svg className={spinnerSm} viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/></svg>}
                   {saving ? 'Staging…' : 'Stage Changes'}
                 </button>
               </div>
 
               {/* Backup / Restore */}
-              <div className="mt-6 p-4 bg-gray-800 rounded-lg border border-gray-700">
-                <h3 className="font-bold mb-1">Configuration backup</h3>
-                <p className="text-xs text-gray-500 mb-3">
+              <div className={cardPad + ' mt-6'}>
+                <h3 className="font-semibold text-slate-100 mb-1">Configuration backup</h3>
+                <p className="text-xs text-slate-500 mb-3">
                   Backup downloads the running config as a text file of set-commands.
                   Restore applies such a file on top of the current config (merge).
                 </p>
-                {backupMsg && <div className="mb-2 p-2 bg-green-900/50 rounded border border-green-700 text-sm text-green-200">{backupMsg}</div>}
-                {backupErr && <div className="mb-2 p-2 bg-red-900/50 rounded border border-red-700 text-sm text-red-200 whitespace-pre-wrap">{backupErr}</div>}
+                {backupMsg && <div className="mb-2 p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-sm text-emerald-200">{backupMsg}</div>}
+                {backupErr && <div className="mb-2 p-2 rounded-lg bg-rose-500/10 border border-rose-500/30 text-sm text-rose-200 whitespace-pre-wrap">{backupErr}</div>}
                 <div className="flex flex-wrap items-center gap-2">
-                  <button onClick={handleBackup} className="px-3 py-2 bg-gray-700 rounded hover:bg-gray-600 text-sm flex items-center gap-2">
+                  <button onClick={handleBackup} className={btnSecondary + ' text-sm flex items-center gap-2'}>
                     <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
                     Download backup
                   </button>
                   <button
                     onClick={() => fileRef.current?.click()}
                     disabled={restoring}
-                    className="px-3 py-2 bg-yellow-700 rounded hover:bg-yellow-600 text-sm flex items-center gap-2 disabled:opacity-50"
+                    className="px-3 py-2 rounded-lg bg-amber-700 hover:bg-amber-600 text-white text-sm font-medium transition-colors flex items-center gap-2 disabled:opacity-50"
                   >
-                    {restoring && <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/></svg>}
+                    {restoring && <svg className={spinnerSm} viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/></svg>}
                     {restoring ? 'Restoring…' : 'Restore from file…'}
                   </button>
                   <input
@@ -314,48 +318,48 @@ export default function SystemPage() {
               </div>
 
               {/* On-device console */}
-              <div className="mt-6 p-4 bg-gray-800 rounded-lg border border-gray-700">
+              <div className={cardPad + ' mt-6'}>
                 <div className="flex items-center justify-between mb-1">
-                  <h3 className="font-bold">On-device console</h3>
+                  <h3 className="font-semibold text-slate-100">On-device console</h3>
                   {deploy && (deploy.on_device
-                    ? <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-green-900 text-green-300">running on device</span>
-                    : <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-700 text-gray-300">workstation (SSH) mode</span>)}
+                    ? <span className={TAG.emerald}>running on device</span>
+                    : <span className={TAG.slate}>workstation (SSH) mode</span>)}
                 </div>
-                <p className="text-xs text-gray-500 mb-3">
+                <p className="text-xs text-slate-500 mb-3">
                   The app will run as a container on the router itself (no SSH at runtime). Port 8001 must be allowed in the firewall input chain.
                 </p>
-                {deployErr && <div className="mb-2 p-2 bg-red-900/50 rounded border border-red-700 text-sm text-red-200">{deployErr}</div>}
-                {deployMsg && <div className="mb-2 p-2 bg-green-900/50 rounded border border-green-700 text-sm text-green-200">{deployMsg}</div>}
+                {deployErr && <div className="mb-2 p-2 rounded-lg bg-rose-500/10 border border-rose-500/30 text-sm text-rose-200">{deployErr}</div>}
+                {deployMsg && <div className="mb-2 p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-sm text-emerald-200">{deployMsg}</div>}
                 {!deploy && !deployErr ? (
-                  <div className="text-sm text-gray-400">Loading…</div>
+                  <div className="text-sm text-slate-400">Loading…</div>
                 ) : deploy && (
                   <>
-                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-400 mb-3">
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-400 mb-3">
                       <span>Container configured: {deploy.container_configured
-                        ? <span className="text-green-400">yes</span>
-                        : <span className="text-gray-500">no</span>}</span>
+                        ? <span className="text-emerald-400">yes</span>
+                        : <span className="text-slate-500">no</span>}</span>
                       <span>Image present: {deploy.image_present === null
-                        ? <span className="text-gray-500">n/a</span>
+                        ? <span className="text-slate-500">n/a</span>
                         : deploy.image_present
-                          ? <span className="text-green-400">yes</span>
-                          : <span className="text-gray-500">no</span>}</span>
+                          ? <span className="text-emerald-400">yes</span>
+                          : <span className="text-slate-500">no</span>}</span>
                       <span>Data seeded: {deploy.data_seeded === null
-                        ? <span className="text-gray-500">n/a</span>
+                        ? <span className="text-slate-500">n/a</span>
                         : deploy.data_seeded
-                          ? <span className="text-green-400">yes</span>
-                          : <span className="text-gray-500">no</span>}</span>
+                          ? <span className="text-emerald-400">yes</span>
+                          : <span className="text-slate-500">no</span>}</span>
                     </div>
                     {deploy.on_device ? (
-                      <p className="text-xs text-gray-400">
+                      <p className="text-xs text-slate-400">
                         This console is already running on the device. To update the on-device image, use a workstation instance of the app.
                       </p>
                     ) : (
                       <button
                         onClick={handleProvisionDeploy}
                         disabled={deploying}
-                        className="px-3 py-2 bg-blue-600 rounded hover:bg-blue-500 text-white text-sm font-medium disabled:opacity-50 flex items-center gap-2"
+                        className={btnPrimary + ' !text-sm'}
                       >
-                        {deploying && <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/></svg>}
+                        {deploying && <svg className={spinnerSm} viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/></svg>}
                         {deploying
                           ? 'Building on device…'
                           : deploy.container_configured ? 'Update on-device image' : 'Deploy to this device'}
@@ -365,17 +369,17 @@ export default function SystemPage() {
                 )}
               </div>
               {/* Device power */}
-              <div className="mt-6 p-4 bg-gray-800 rounded-lg border border-gray-700">
-                <h3 className="font-bold mb-1">Device power</h3>
-                <p className="text-xs text-gray-500 mb-3">
+              <div className={cardPad + ' mt-6'}>
+                <h3 className="font-semibold text-slate-100 mb-1">Device power</h3>
+                <p className="text-xs text-slate-500 mb-3">
                   Reboot or shut down the router. The console becomes unavailable immediately; after a reboot it comes back on its own.
                 </p>
-                {powerMsg && <div className="mb-2 p-2 bg-yellow-900/40 rounded border border-yellow-700 text-sm text-yellow-200">{powerMsg}</div>}
+                {powerMsg && <div className="mb-2 p-2 rounded-lg bg-amber-500/10 border border-amber-500/30 text-sm text-amber-200">{powerMsg}</div>}
                 <div className="flex gap-2">
-                  <button onClick={() => setPowerAction('reboot')} disabled={powerBusy} className="px-3 py-2 bg-blue-600 rounded hover:bg-blue-500 text-white text-sm font-medium disabled:opacity-50">
+                  <button onClick={() => setPowerAction('reboot')} disabled={powerBusy} className={btnPrimary + ' !text-sm'}>
                     Reboot
                   </button>
-                  <button onClick={() => setPowerAction('shutdown')} disabled={powerBusy} className="px-3 py-2 bg-red-700 rounded hover:bg-red-600 text-white text-sm font-medium disabled:opacity-50">
+                  <button onClick={() => setPowerAction('shutdown')} disabled={powerBusy} className="px-3 py-2 rounded-lg bg-rose-700 hover:bg-rose-600 text-white text-sm font-medium transition-colors disabled:opacity-50">
                     Shutdown
                   </button>
                 </div>
@@ -385,49 +389,49 @@ export default function SystemPage() {
         </div>
 
         {/* Resources */}
-        <div className="p-4 bg-gray-800 rounded-lg border border-gray-700">
+        <div className={cardPad}>
           <div className="flex items-start justify-between mb-3">
-            <h3 className="font-bold">Resources</h3>
-            <div className="text-right text-xs text-gray-400 space-y-0.5">
-              {resources?.device_time && <div>Time: <span className="font-mono text-gray-200">{resources.device_time}</span></div>}
+            <h3 className="font-semibold text-slate-100">Resources</h3>
+            <div className="text-right text-xs text-slate-400 space-y-0.5">
+              {resources?.device_time && <div>Time: <span className="font-mono text-slate-200">{resources.device_time}</span></div>}
               {resources?.uptime && <div>Uptime: {resources.uptime}</div>}
             </div>
           </div>
-          {resErr && <div className="mb-2 text-sm text-red-300">{resErr}</div>}
+          {resErr && <div className="mb-2 text-sm text-rose-300">{resErr}</div>}
           {!resources && !resErr ? (
-            <div className="text-sm text-gray-400">Loading…</div>
+            <div className="text-sm text-slate-400">Loading…</div>
           ) : resources && (
             <div className="space-y-5">
               <div>
-                <div className="text-xs uppercase text-gray-400 mb-1">CPU load</div>
+                <div className="text-xs uppercase tracking-wide text-slate-400 mb-1">CPU load</div>
                 <div className="space-y-1.5">
                   {([['1 min', resources.load1], ['5 min', resources.load5], ['15 min', resources.load15]] as const).map(([label, v]) => (
                     <div key={label} className="flex items-center gap-2">
-                      <span className="text-xs text-gray-400 w-10">{label}</span>
-                      <Bar pct={v ?? 0} color={(v ?? 0) > 80 ? 'bg-red-500' : (v ?? 0) > 50 ? 'bg-yellow-500' : 'bg-green-500'} />
-                      <span className="text-xs font-mono w-12 text-right">{v != null ? `${v.toFixed(0)}%` : '-'}</span>
+                      <span className="text-xs text-slate-400 w-10">{label}</span>
+                      <Bar pct={v ?? 0} color={(v ?? 0) > 80 ? 'bg-rose-500' : (v ?? 0) > 50 ? 'bg-amber-500' : 'bg-emerald-500'} />
+                      <span className="text-xs font-mono w-12 text-right text-slate-300">{v != null ? `${v.toFixed(0)}%` : '-'}</span>
                     </div>
                   ))}
                 </div>
-                <div className="text-xs text-gray-500 mt-2">
+                <div className="text-xs text-slate-500 mt-2">
                   {resources.cpu_model}{resources.cpu_cores ? `, ${resources.cpu_cores} core(s)` : ''}{resources.cpu_mhz ? ` @ ${resources.cpu_mhz.toFixed(0)} MHz` : ''}
                 </div>
               </div>
               <div>
-                <div className="text-xs uppercase text-gray-400 mb-1">Memory</div>
-                <Bar pct={memPct} color={memPct > 85 ? 'bg-red-500' : memPct > 65 ? 'bg-yellow-500' : 'bg-green-500'} />
-                <div className="text-xs font-mono text-gray-300 mt-1.5">
+                <div className="text-xs uppercase tracking-wide text-slate-400 mb-1">Memory</div>
+                <Bar pct={memPct} color={memPct > 85 ? 'bg-rose-500' : memPct > 65 ? 'bg-amber-500' : 'bg-emerald-500'} />
+                <div className="text-xs font-mono text-slate-300 mt-1.5">
                   {resources.mem_used_mb?.toFixed(0) ?? '-'} / {resources.mem_total_mb?.toFixed(0) ?? '-'} MB used
                 </div>
-                <div className="text-xs text-gray-500">free: {resources.mem_free_mb?.toFixed(0) ?? '-'} MB</div>
+                <div className="text-xs text-slate-500">free: {resources.mem_free_mb?.toFixed(0) ?? '-'} MB</div>
               </div>
               <div>
-                <div className="text-xs uppercase text-gray-400 mb-1">Disk {resources.disk_fs && <span className="font-mono normal-case">({resources.disk_fs})</span>}</div>
-                <Bar pct={resources.disk_used_pct ?? 0} color={(resources.disk_used_pct ?? 0) > 85 ? 'bg-red-500' : (resources.disk_used_pct ?? 0) > 65 ? 'bg-yellow-500' : 'bg-green-500'} />
-                <div className="text-xs font-mono text-gray-300 mt-1.5">
+                <div className="text-xs uppercase tracking-wide text-slate-400 mb-1">Disk {resources.disk_fs && <span className="font-mono normal-case">({resources.disk_fs})</span>}</div>
+                <Bar pct={resources.disk_used_pct ?? 0} color={(resources.disk_used_pct ?? 0) > 85 ? 'bg-rose-500' : (resources.disk_used_pct ?? 0) > 65 ? 'bg-amber-500' : 'bg-emerald-500'} />
+                <div className="text-xs font-mono text-slate-300 mt-1.5">
                   {resources.disk_used ?? '-'} / {resources.disk_size ?? '-'} ({resources.disk_used_pct ?? '-'}%)
                 </div>
-                <div className="text-xs text-gray-500">available: {resources.disk_available ?? '-'}</div>
+                <div className="text-xs text-slate-500">available: {resources.disk_available ?? '-'}</div>
               </div>
             </div>
           )}
@@ -436,19 +440,19 @@ export default function SystemPage() {
 
       {/* Power confirm modal */}
       {powerAction && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-          <div className="bg-gray-800 rounded-xl p-6 w-full max-w-md border border-gray-700 shadow-xl">
-            <h3 className="text-lg font-bold mb-2">{powerAction === 'reboot' ? 'Reboot the device?' : 'Shut down the device?'}</h3>
-            <p className="text-sm text-gray-400 mb-4">
+        <div className={modalOverlay}>
+          <div className={modalCard + ' max-w-md'}>
+            <h3 className={modalTitle + ' !mb-2'}>{powerAction === 'reboot' ? 'Reboot the device?' : 'Shut down the device?'}</h3>
+            <p className="text-sm text-slate-400 mb-4">
               {powerAction === 'reboot'
                 ? 'The router will reboot. All connections (including this console) drop; the console comes back automatically about a minute after boot.'
                 : 'The router will power off. You will need physical access (or a PDU) to turn it back on.'}
             </p>
             <div className="flex justify-end gap-2">
-              <button onClick={() => setPowerAction(null)} className="px-4 py-2 rounded bg-gray-700 hover:bg-gray-600">Cancel</button>
+              <button onClick={() => setPowerAction(null)} className={btnSecondary}>Cancel</button>
               <button
                 onClick={handlePower}
-                className={`px-4 py-2 rounded text-white font-medium ${powerAction === 'reboot' ? 'bg-blue-600 hover:bg-blue-500' : 'bg-red-700 hover:bg-red-600'}`}
+                className={powerAction === 'reboot' ? btnPrimary : btnDanger}
               >
                 {powerAction === 'reboot' ? 'Reboot' : 'Shutdown'}
               </button>

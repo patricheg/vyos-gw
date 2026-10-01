@@ -10,8 +10,12 @@ import {
 import type { HaproxyStatus } from '../api/client';
 import type { HaproxyConfig, HaproxyService, HaproxyBackend, HaproxyServer, HaproxyServiceRule, GeoipStatus } from '../types';
 import CountrySelect from '../components/CountrySelect';
-
-const inputCls = 'w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded focus:outline-none focus:border-blue-500';
+import {
+  pageTitle, sectionTitle, btnSecondarySm, btnPrimary, btnPrimarySm, btnSecondary,
+  inputCls, labelCls, hintText, TAG,
+  alertErr, alertOk, modalOverlay, modalCard, modalTitle,
+  linkEdit, linkDelete, hintBox, emptyBox, card, cardPad, checkboxCls,
+} from '../ui';
 
 const LOG_FACILITIES = ['daemon', 'local0', 'local1', 'local2', 'local3', 'local4', 'local5', 'local6', 'local7'];
 
@@ -499,105 +503,105 @@ export default function HaproxyPage() {
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-2xl font-bold">HAProxy — Load Balancing</h2>
+        <h2 className={pageTitle}>HAProxy — Load Balancing</h2>
         <div className="flex gap-2">
-          <button onClick={openGlobals} className="px-3 py-1 bg-gray-700 rounded hover:bg-gray-600 text-sm">
+          <button onClick={openGlobals} className={btnSecondarySm}>
             ⚙ Global Settings
           </button>
-          <button onClick={load} disabled={loading} className="px-3 py-1 bg-gray-700 rounded hover:bg-gray-600 text-sm disabled:opacity-50">
+          <button onClick={load} disabled={loading} className={btnSecondarySm}>
             {loading ? 'Refreshing…' : 'Refresh'}
           </button>
         </div>
       </div>
 
-      {err && <div className="mb-4 p-3 bg-red-900/50 rounded border border-red-700 text-sm text-red-200">{err}</div>}
-      {msg && <div className="mb-4 p-3 bg-green-900/50 rounded border border-green-700 text-sm text-green-200">{msg}</div>}
+      {err && <div className={alertErr}>{err}</div>}
+      {msg && <div className={alertOk}>{msg}</div>}
 
       {/* Container status / provisioning banner */}
       {status && (
-        <div className={`mb-4 p-3 rounded border text-sm flex flex-wrap items-center gap-x-4 gap-y-2 ${
+        <div className={`mb-4 p-3 rounded-xl border text-sm flex flex-wrap items-center gap-x-4 gap-y-2 ${
           status.provisioned
-            ? 'bg-gray-800/80 border-gray-700 text-gray-300'
-            : 'bg-blue-900/30 border-blue-700 text-blue-200'
+            ? 'bg-slate-800/60 border-slate-700/60 text-slate-300'
+            : 'bg-indigo-500/10 border-indigo-500/30 text-indigo-200'
         }`}>
           <span>
             Container engine:{' '}
-            <strong className="text-white">
+            <strong className="text-slate-100">
               {status.provisioned
                 ? status.running === true ? 'running' : status.running === false ? 'stopped' : 'provisioned'
                 : 'not provisioned'}
             </strong>
           </span>
           {status.builtin_active && (
-            <span className="text-yellow-300">built-in HAProxy config still present</span>
+            <span className="text-amber-300">built-in HAProxy config still present</span>
           )}
           {!status.provisioned && (
-            <button onClick={handleProvision} disabled={working !== null} className="px-3 py-1 bg-blue-600 rounded hover:bg-blue-500 text-white text-xs font-medium disabled:opacity-50">
+            <button onClick={handleProvision} disabled={working !== null} className={btnPrimarySm + ' !text-xs'}>
               {isWorking('provision') ? 'Pulling image…' : 'Provision container'}
             </button>
           )}
           {status.builtin_active && (
-            <button onClick={handleMigrate} disabled={working !== null} className="px-3 py-1 bg-yellow-700 rounded hover:bg-yellow-600 text-white text-xs font-medium disabled:opacity-50">
+            <button onClick={handleMigrate} disabled={working !== null} className="px-3 py-1.5 rounded-lg bg-amber-700 hover:bg-amber-600 text-white text-xs font-medium transition-colors disabled:opacity-50">
               {isWorking('migrate') ? 'Migrating…' : 'Migrate built-in config → container'}
             </button>
           )}
           {!status.provisioned && !status.builtin_active && (
-            <span className="text-xs text-gray-400">Provision the container to enable HAProxy management.</span>
+            <span className="text-xs text-slate-400">Provision the container to enable HAProxy management.</span>
           )}
         </div>
       )}
 
       {/* Global settings modal */}
       {showGlobals && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-          <div className="bg-gray-800 rounded-xl p-6 w-full max-w-lg border border-gray-700 shadow-xl">
-            <h3 className="text-lg font-bold mb-4">HAProxy Global Settings</h3>
+        <div className={modalOverlay}>
+          <div className={modalCard}>
+            <h3 className={modalTitle}>HAProxy Global Settings</h3>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-sm text-gray-400 mb-1">Max connections</label>
+                <label className={labelCls}>Max connections</label>
                 <input type="number" value={globals.max_connections} onChange={e => setGlobals({ ...globals, max_connections: e.target.value })} className={inputCls} placeholder="default" />
               </div>
               <div>
-                <label className="block text-sm text-gray-400 mb-1">Client timeout, s</label>
+                <label className={labelCls}>Client timeout, s</label>
                 <input type="number" value={globals.timeout_client} onChange={e => setGlobals({ ...globals, timeout_client: e.target.value })} className={inputCls} placeholder="50" />
               </div>
               <div>
-                <label className="block text-sm text-gray-400 mb-1">Connect timeout, s</label>
+                <label className={labelCls}>Connect timeout, s</label>
                 <input type="number" value={globals.timeout_connect} onChange={e => setGlobals({ ...globals, timeout_connect: e.target.value })} className={inputCls} placeholder="5" />
               </div>
               <div>
-                <label className="block text-sm text-gray-400 mb-1">Server timeout, s</label>
+                <label className={labelCls}>Server timeout, s</label>
                 <input type="number" value={globals.timeout_server} onChange={e => setGlobals({ ...globals, timeout_server: e.target.value })} className={inputCls} placeholder="50" />
               </div>
             </div>
-            <div className="mt-5 pt-4 border-t border-gray-700">
+            <div className="mt-5 pt-4 border-t border-slate-700/60">
               <div className="flex items-center justify-between mb-2">
-                <h4 className="text-sm font-semibold text-gray-300">GeoIP DB</h4>
-                <button onClick={handleUpdateGeoip} disabled={isWorking('geoip')} className="px-3 py-1 bg-blue-600 rounded hover:bg-blue-500 text-white text-xs font-medium disabled:opacity-50">
+                <h4 className="text-sm font-semibold text-slate-300">GeoIP DB</h4>
+                <button onClick={handleUpdateGeoip} disabled={isWorking('geoip')} className={btnPrimarySm + ' !text-xs'}>
                   {isWorking('geoip') ? 'Updating…' : 'Update DB'}
                 </button>
               </div>
               {geoip === null ? (
-                <p className="text-xs text-gray-500">Status unavailable.</p>
+                <p className="text-xs text-slate-500">Status unavailable.</p>
               ) : (
-                <div className="text-xs text-gray-400 space-y-1">
+                <div className="text-xs text-slate-400 space-y-1">
                   <div>
                     Status: {geoip.available
-                      ? <span className="text-green-400">available</span>
-                      : <span className="text-yellow-400">not available</span>}
+                      ? <span className="text-emerald-400">available</span>
+                      : <span className="text-amber-400">not available</span>}
                   </div>
-                  {geoip.updated_at && <div>Updated: <span className="text-gray-300">{geoip.updated_at}</span></div>}
-                  <div>Entries: <span className="text-gray-300">{geoip.entries}</span> · Countries: <span className="text-gray-300">{geoip.countries}</span></div>
-                  {geoip.source && <div>Source: <span className="text-gray-300">{geoip.source}</span></div>}
+                  {geoip.updated_at && <div>Updated: <span className="text-slate-300">{geoip.updated_at}</span></div>}
+                  <div>Entries: <span className="text-slate-300">{geoip.entries}</span> · Countries: <span className="text-slate-300">{geoip.countries}</span></div>
+                  {geoip.source && <div>Source: <span className="text-slate-300">{geoip.source}</span></div>}
                 </div>
               )}
-              {geoipMsg && <div className="mt-2 text-xs text-green-300">{geoipMsg}</div>}
-              {geoipErr && <div className="mt-2 text-xs text-red-300">{geoipErr}</div>}
+              {geoipMsg && <div className="mt-2 text-xs text-emerald-300">{geoipMsg}</div>}
+              {geoipErr && <div className="mt-2 text-xs text-rose-300">{geoipErr}</div>}
             </div>
-            {err && <div className="mt-4 p-3 bg-red-900/50 rounded border border-red-700 text-sm text-red-200">{err}</div>}
+            {err && <div className="mt-4 p-3 rounded-lg bg-rose-500/10 border border-rose-500/30 text-sm text-rose-200">{err}</div>}
             <div className="flex justify-end gap-2 mt-6">
-              <button onClick={() => setShowGlobals(false)} disabled={isWorking('globals')} className="px-4 py-2 rounded bg-gray-700 hover:bg-gray-600 disabled:opacity-50">Cancel</button>
-              <button onClick={handleSaveGlobals} disabled={isWorking('globals')} className="px-4 py-2 rounded bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium disabled:opacity-50">
+              <button onClick={() => setShowGlobals(false)} disabled={isWorking('globals')} className={btnSecondary}>Cancel</button>
+              <button onClick={handleSaveGlobals} disabled={isWorking('globals')} className={btnPrimary}>
                 {isWorking('globals') ? 'Saving…' : 'Save Globals'}
               </button>
             </div>
@@ -607,19 +611,19 @@ export default function HaproxyPage() {
 
       {/* Services */}
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-lg font-semibold">Services (frontends)</h3>
+        <h3 className={sectionTitle}>Services (frontends)</h3>
         <div className="flex gap-2">
-          <button onClick={openAcmeStub} disabled={working !== null} className="px-3 py-1 bg-gray-700 rounded hover:bg-gray-600 text-sm disabled:opacity-50" title="Create an HTTP:80 stub for Let's Encrypt (certbot) challenges">
+          <button onClick={openAcmeStub} disabled={working !== null} className={btnSecondarySm} title="Create an HTTP:80 stub for Let's Encrypt (certbot) challenges">
             ACME Stub
           </button>
-          <button onClick={openAddSvc} className="px-3 py-1 bg-blue-600 rounded hover:bg-blue-500 text-sm text-white font-medium">+ Add Service</button>
+          <button onClick={openAddSvc} className={btnPrimarySm}>+ Add Service</button>
         </div>
       </div>
 
       {loading && cfg.services.length === 0 ? (
-        <div className="text-gray-400 mb-6">Loading…</div>
+        <div className="text-slate-400 mb-6">Loading…</div>
       ) : cfg.services.length === 0 ? (
-        <div className="mb-6 p-6 border border-dashed border-gray-600 rounded-lg text-center text-gray-400">
+        <div className={emptyBox + ' mb-6'}>
           No HAProxy services yet.
         </div>
       ) : (
@@ -627,84 +631,84 @@ export default function HaproxyPage() {
           {cfg.services.map(s => {
             const expanded = expandedSvcs.has(s.name);
             return (
-              <div key={s.name} className="bg-gray-800 rounded-lg border border-gray-700 overflow-hidden">
+              <div key={s.name} className={`${card} overflow-hidden`}>
                 <div
-                  className="flex items-center justify-between gap-3 px-4 py-3 cursor-pointer hover:bg-gray-700/40 select-none"
+                  className="flex items-center justify-between gap-3 px-4 py-3 cursor-pointer hover:bg-slate-700/30 select-none transition-colors"
                   onClick={() => toggleSvc(s.name)}
                   title={expanded ? 'Click to collapse' : 'Click to see routing rules'}
                 >
                   <div className="flex items-center gap-2.5 flex-wrap min-w-0">
-                    <span className={`text-gray-500 text-[10px] transition-transform ${expanded ? 'rotate-90' : ''}`}>▶</span>
-                    <span className="font-mono text-blue-300 font-semibold">{s.name}</span>
-                    <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-700 text-gray-300 uppercase">{s.mode || 'http'}</span>
-                    <span className="font-mono text-xs text-gray-300">
+                    <span className={`text-slate-500 text-[10px] transition-transform ${expanded ? 'rotate-90' : ''}`}>▶</span>
+                    <span className="font-mono text-indigo-300 font-semibold">{s.name}</span>
+                    <span className={`${TAG.slate} uppercase`}>{s.mode || 'http'}</span>
+                    <span className="font-mono text-xs text-slate-300">
                       {(s.listen_addresses.length > 0 ? s.listen_addresses.join(', ') : '*')}:{s.port ?? '?'}
                     </span>
-                    {s.ssl_certificate && <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-green-900 text-green-300" title={`TLS certificate: ${s.ssl_certificate}`}>TLS:{s.ssl_certificate}</span>}
+                    {s.ssl_certificate && <span className={TAG.emerald} title={`TLS certificate: ${s.ssl_certificate}`}>TLS:{s.ssl_certificate}</span>}
                     {s.ssl_certificates && s.ssl_certificates.length > 0 && (
-                      <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-green-900/60 text-green-300" title={`Additional SNI certificates: ${s.ssl_certificates.join(', ')}`}>
+                      <span className={TAG.emerald} title={`Additional SNI certificates: ${s.ssl_certificates.join(', ')}`}>
                         +{s.ssl_certificates.length} certs
                       </span>
                     )}
-                    {s.redirect_http_to_https && <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-purple-900 text-purple-300">→HTTPS</span>}
-                    {s.logging_facility && <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-sky-900 text-sky-300">log:{s.logging_facility}</span>}
+                    {s.redirect_http_to_https && <span className={TAG.purple}>→HTTPS</span>}
+                    {s.logging_facility && <span className={TAG.sky}>log:{s.logging_facility}</span>}
                     {s.geoip_mode && s.geoip_mode !== 'off' && (
                       <span
-                        className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${s.geoip_mode === 'allow' ? 'bg-amber-900 text-amber-300' : 'bg-orange-900 text-orange-300'}`}
+                        className={s.geoip_mode === 'allow' ? TAG.amber : TAG.orange}
                         title={`GeoIP ${s.geoip_mode}: ${s.geoip_countries.join(', ') || 'no countries selected'}`}
                       >
                         GeoIP: {s.geoip_mode}{s.geoip_countries.length > 0 && ' ' + s.geoip_countries.slice(0, 4).join(',') + (s.geoip_countries.length > 4 ? ',…' : '')}
                       </span>
                     )}
-                    {s.rules.length > 0 && <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-violet-900 text-violet-300">{s.rules.length} rule{s.rules.length > 1 ? 's' : ''}</span>}
+                    {s.rules.length > 0 && <span className={TAG.violet}>{s.rules.length} rule{s.rules.length > 1 ? 's' : ''}</span>}
                   </div>
                   <div className="flex items-center gap-3 whitespace-nowrap" onClick={e => e.stopPropagation()}>
                     {s.backends.length > 0 && (
-                      <span className="text-xs text-gray-400" title="Default backend(s)">→ <span className="font-mono">{s.backends.join(', ')}</span></span>
+                      <span className="text-xs text-slate-400" title="Default backend(s)">→ <span className="font-mono">{s.backends.join(', ')}</span></span>
                     )}
-                    <button onClick={() => openEditSvc(s)} className="text-blue-400 hover:text-blue-300 text-sm">Edit</button>
-                    <button onClick={() => handleDeleteSvc(s.name)} disabled={isWorking('del-svc-' + s.name)} className="text-red-400 hover:text-red-300 text-sm disabled:opacity-50">
+                    <button onClick={() => openEditSvc(s)} className={linkEdit}>Edit</button>
+                    <button onClick={() => handleDeleteSvc(s.name)} disabled={isWorking('del-svc-' + s.name)} className={linkDelete}>
                       {isWorking('del-svc-' + s.name) ? '…' : 'Del'}
                     </button>
                   </div>
                 </div>
                 {expanded && (
-                  <div className="border-t border-gray-700 px-4 py-3 bg-gray-900/40 text-sm">
-                    {s.description && <div className="text-gray-400 mb-3">{s.description}</div>}
-                    <h4 className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-2">Routing rules (in order)</h4>
+                  <div className="border-t border-slate-700/60 px-4 py-3 bg-slate-900/40 text-sm">
+                    {s.description && <div className="text-slate-400 mb-3">{s.description}</div>}
+                    <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-2">Routing rules (in order)</h4>
                     {s.rules.length === 0 ? (
-                      <p className="text-xs text-gray-500">
-                        No match rules — all traffic goes to the default backend{s.backends.length > 0 && <> (<span className="font-mono text-blue-300">{s.backends.join(', ')}</span>)</>}.
+                      <p className="text-xs text-slate-500">
+                        No match rules — all traffic goes to the default backend{s.backends.length > 0 && <> (<span className="font-mono text-indigo-300">{s.backends.join(', ')}</span>)</>}.
                       </p>
                     ) : (
-                      <div className="rounded border border-gray-700/70 divide-y divide-gray-700/50 overflow-hidden">
+                      <div className="rounded-lg border border-slate-700/60 divide-y divide-slate-700/50 overflow-hidden">
                         {[...s.rules].sort((a, b) => a.number - b.number).map(r => (
-                          <div key={r.number} className="flex items-center gap-2.5 px-3 py-2 bg-gray-900/60 flex-wrap">
-                            <span className="font-mono text-gray-500 text-xs w-8">#{r.number}</span>
+                          <div key={r.number} className="flex items-center gap-2.5 px-3 py-2 bg-slate-900/60 flex-wrap">
+                            <span className="font-mono text-slate-500 text-xs w-8">#{r.number}</span>
                             {r.domain_name !== null ? (
-                              <span className="px-1.5 py-0.5 rounded bg-violet-900/60 text-violet-200 text-xs font-mono" title={r.wildcard_domain ? 'Domain and all its subdomains' : 'Exact domain'}>
+                              <span className="px-1.5 py-0.5 rounded-md bg-violet-500/10 text-violet-200 text-xs font-mono ring-1 ring-inset ring-violet-500/25" title={r.wildcard_domain ? 'Domain and all its subdomains' : 'Exact domain'}>
                                 {r.wildcard_domain ? '*.' : ''}{r.domain_name}
                               </span>
                             ) : (
-                              <span className="px-1.5 py-0.5 rounded bg-teal-900/60 text-teal-200 text-xs font-mono" title="URL path match">
+                              <span className="px-1.5 py-0.5 rounded-md bg-teal-500/10 text-teal-200 text-xs font-mono ring-1 ring-inset ring-teal-500/25" title="URL path match">
                                 path {{ begin: 'begins', end: 'ends', exact: 'equals' }[r.url_path_match || 'begin']} {r.url_path}
                               </span>
                             )}
-                            <span className="text-gray-500">→</span>
+                            <span className="text-slate-500">→</span>
                             {r.backend !== null ? (
-                              <span className="font-mono text-blue-300 text-xs" title="Forward to backend">{r.backend}</span>
+                              <span className="font-mono text-indigo-300 text-xs" title="Forward to backend">{r.backend}</span>
                             ) : (
                               <span className="font-mono text-purple-300 text-xs" title="Redirect client">↷ {r.redirect_location}</span>
                             )}
                           </div>
                         ))}
-                        <div className="flex items-center gap-2.5 px-3 py-2 bg-gray-900/30 text-xs text-gray-500">
+                        <div className="flex items-center gap-2.5 px-3 py-2 bg-slate-900/30 text-xs text-slate-500">
                           <span className="w-8" />
                           <span>everything else</span>
                           <span>→</span>
                           {s.backends.length > 0
-                            ? <span className="font-mono text-blue-300">{s.backends.join(', ')}</span>
-                            : <span className="text-red-400">no default backend!</span>}
+                            ? <span className="font-mono text-indigo-300">{s.backends.join(', ')}</span>
+                            : <span className="text-rose-400">no default backend!</span>}
                         </div>
                       </div>
                     )}
@@ -718,46 +722,46 @@ export default function HaproxyPage() {
 
       {/* Backends */}
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-lg font-semibold">Backends (server pools)</h3>
-        <button onClick={openAddBe} className="px-3 py-1 bg-blue-600 rounded hover:bg-blue-500 text-sm text-white font-medium">+ Add Backend</button>
+        <h3 className={sectionTitle}>Backends (server pools)</h3>
+        <button onClick={openAddBe} className={btnPrimarySm}>+ Add Backend</button>
       </div>
 
       {cfg.backends.length === 0 ? (
-        <div className="p-6 border border-dashed border-gray-600 rounded-lg text-center text-gray-400">
+        <div className={emptyBox}>
           No HAProxy backends yet.
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {cfg.backends.map(b => (
-            <div key={b.name} className="p-4 bg-gray-800 rounded-lg border border-gray-700">
+            <div key={b.name} className={cardPad}>
               <div className="flex items-center justify-between mb-2">
                 <div>
-                  <span className="font-mono text-blue-300 font-semibold">{b.name}</span>
-                  <span className="ml-2 px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-700 text-gray-300 uppercase align-middle">{b.mode || 'http'}</span>
-                  {b.balance && <span className="ml-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-indigo-900 text-indigo-300 align-middle">{b.balance}</span>}
-                  {b.logging_facility && <span className="ml-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-sky-900 text-sky-300 align-middle">log:{b.logging_facility}</span>}
-                  {b.ssl_no_verify && <span className="ml-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-orange-900 text-orange-300 align-middle" title="TLS to servers, certificate not verified">TLS!</span>}
-                  {b.ssl_ca_certificate && <span className="ml-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-green-900 text-green-300 align-middle" title={`TLS to servers, verified by CA ${b.ssl_ca_certificate}`}>TLS</span>}
+                  <span className="font-mono text-indigo-300 font-semibold">{b.name}</span>
+                  <span className={`ml-2 align-middle ${TAG.slate} uppercase`}>{b.mode || 'http'}</span>
+                  {b.balance && <span className={`ml-1 align-middle ${TAG.indigo}`}>{b.balance}</span>}
+                  {b.logging_facility && <span className={`ml-1 align-middle ${TAG.sky}`}>log:{b.logging_facility}</span>}
+                  {b.ssl_no_verify && <span className={`ml-1 align-middle ${TAG.orange}`} title="TLS to servers, certificate not verified">TLS!</span>}
+                  {b.ssl_ca_certificate && <span className={`ml-1 align-middle ${TAG.emerald}`} title={`TLS to servers, verified by CA ${b.ssl_ca_certificate}`}>TLS</span>}
                 </div>
                 <div className="whitespace-nowrap">
-                  <button onClick={() => openEditBe(b)} className="text-blue-400 hover:text-blue-300 text-sm mr-3">Edit</button>
-                  <button onClick={() => handleDeleteBe(b.name)} disabled={isWorking('del-be-' + b.name)} className="text-red-400 hover:text-red-300 text-sm disabled:opacity-50">
+                  <button onClick={() => openEditBe(b)} className={linkEdit + ' mr-3'}>Edit</button>
+                  <button onClick={() => handleDeleteBe(b.name)} disabled={isWorking('del-be-' + b.name)} className={linkDelete}>
                     {isWorking('del-be-' + b.name) ? '…' : 'Del'}
                   </button>
                 </div>
               </div>
-              {b.description && <div className="text-sm text-gray-400 mb-2">{b.description}</div>}
+              {b.description && <div className="text-sm text-slate-400 mb-2">{b.description}</div>}
               <table className="w-full text-sm">
-                <tbody className="divide-y divide-gray-700/50">
+                <tbody className="divide-y divide-slate-700/50">
                   {b.servers.map(srv => (
                     <tr key={srv.name}>
-                      <td className="py-1.5 font-mono text-gray-300">{srv.name}</td>
-                      <td className="py-1.5 font-mono text-green-300">{srv.address || '?'}:{srv.port ?? '?'}</td>
+                      <td className="py-1.5 font-mono text-slate-300">{srv.name}</td>
+                      <td className="py-1.5 font-mono text-emerald-300">{srv.address || '?'}:{srv.port ?? '?'}</td>
                       <td className="py-1.5 text-right">
-                        {srv.check && <span className="ml-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-900 text-emerald-300">check{srv.check_port ? `:${srv.check_port}` : ''}</span>}
-                        {srv.backup && <span className="ml-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-yellow-900 text-yellow-300">backup</span>}
-                        {srv.send_proxy && <span className="ml-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-cyan-900 text-cyan-300">proxy-v1</span>}
-                        {srv.send_proxy_v2 && <span className="ml-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-cyan-900 text-cyan-300">proxy-v2</span>}
+                        {srv.check && <span className={`ml-1 ${TAG.emerald}`}>check{srv.check_port ? `:${srv.check_port}` : ''}</span>}
+                        {srv.backup && <span className={`ml-1 ${TAG.amber}`}>backup</span>}
+                        {srv.send_proxy && <span className={`ml-1 ${TAG.cyan}`}>proxy-v1</span>}
+                        {srv.send_proxy_v2 && <span className={`ml-1 ${TAG.cyan}`}>proxy-v2</span>}
                       </td>
                     </tr>
                   ))}
@@ -770,35 +774,35 @@ export default function HaproxyPage() {
 
       {/* Service modal */}
       {showSvcForm && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-          <div className="bg-gray-800 rounded-xl p-6 w-full max-w-2xl border border-gray-700 shadow-xl max-h-[90vh] overflow-y-auto">
-            <h3 className="text-lg font-bold mb-4">
-              {editSvc !== null ? <>Edit service <span className="text-blue-400">{editSvc}</span></> : 'New HAProxy Service'}
+        <div className={modalOverlay}>
+          <div className={modalCard + ' max-w-2xl max-h-[90vh] overflow-y-auto'}>
+            <h3 className={modalTitle}>
+              {editSvc !== null ? <>Edit service <span className="text-indigo-400">{editSvc}</span></> : 'New HAProxy Service'}
             </h3>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-sm text-gray-400 mb-1">Name</label>
-                <input value={svcForm.name} onChange={e => setSvcForm({ ...svcForm, name: e.target.value })} disabled={editSvc !== null} className={inputCls + ' disabled:opacity-50'} placeholder="web-front" />
+                <label className={labelCls}>Name</label>
+                <input value={svcForm.name} onChange={e => setSvcForm({ ...svcForm, name: e.target.value })} disabled={editSvc !== null} className={inputCls} placeholder="web-front" />
               </div>
               <div>
-                <label className="block text-sm text-gray-400 mb-1">Mode</label>
+                <label className={labelCls}>Mode</label>
                 <select value={svcForm.mode || 'http'} onChange={e => setSvcForm({ ...svcForm, mode: e.target.value as 'http' | 'tcp' })} className={inputCls}>
                   <option value="http">HTTP</option>
                   <option value="tcp">TCP</option>
                 </select>
               </div>
               <div>
-                <label className="block text-sm text-gray-400 mb-1">Port</label>
+                <label className={labelCls}>Port</label>
                 <input type="number" value={svcForm.port ?? ''} onChange={e => setSvcForm({ ...svcForm, port: e.target.value === '' ? null : Number(e.target.value) })} className={inputCls} placeholder="80" />
               </div>
               <div>
-                <label className="block text-sm text-gray-400 mb-1">Listen addresses</label>
+                <label className={labelCls}>Listen addresses</label>
                 <input value={svcListen} onChange={e => setSvcListen(e.target.value)} className={inputCls} placeholder="empty = all, or 1.2.3.4, 5.6.7.8" />
               </div>
               <div className="col-span-2">
-                <label className="block text-sm text-gray-400 mb-1">Backends</label>
-                <div className="flex flex-wrap gap-3 p-2 bg-gray-900 border border-gray-700 rounded">
-                  {stagedBackends.length === 0 && <span className="text-sm text-gray-500">No backends yet — create one first</span>}
+                <label className={labelCls}>Backends</label>
+                <div className="flex flex-wrap gap-3 p-2 bg-slate-900 border border-slate-700 rounded-lg">
+                  {stagedBackends.length === 0 && <span className="text-sm text-slate-500">No backends yet — create one first</span>}
                   {stagedBackends.map(name => (
                     <label key={name} className="flex items-center gap-1.5 text-sm cursor-pointer">
                       <input
@@ -810,6 +814,7 @@ export default function HaproxyPage() {
                             ? [...svcForm.backends, name]
                             : svcForm.backends.filter(x => x !== name),
                         })}
+                        className={checkboxCls}
                       />
                       <span className="font-mono">{name}</span>
                     </label>
@@ -818,25 +823,25 @@ export default function HaproxyPage() {
               </div>
               <div className="col-span-2">
                 <div className="flex items-center justify-between mb-1">
-                  <label className="block text-sm text-gray-400">Routing rules</label>
+                  <label className="block text-sm text-slate-400">Routing rules</label>
                   <button
                     onClick={() => setSvcForm({
                       ...svcForm,
                       rules: [...svcForm.rules, { ...newRule((svcForm.rules.length + 1) * 10), backend: stagedBackends[0] ?? '' }],
                     })}
-                    className="px-2 py-1 bg-gray-700 rounded hover:bg-gray-600 text-xs"
+                    className={btnSecondarySm + ' !px-2 !py-1 text-xs'}
                   >
                     + Add Rule
                   </button>
                 </div>
                 {svcForm.rules.length === 0 ? (
-                  <p className="text-xs text-gray-500">No rules — all traffic goes to the default backend(s).</p>
+                  <p className="text-xs text-slate-500">No rules — all traffic goes to the default backend(s).</p>
                 ) : (
                   <div className="space-y-2">
                     {svcForm.rules.map((r, idx) => (
-                      <div key={idx} className="p-2 bg-gray-900 rounded border border-gray-700 space-y-2">
+                      <div key={idx} className="p-2 bg-slate-900 rounded-lg border border-slate-700 space-y-2">
                         <div className="flex items-center gap-2">
-                          <span className="text-gray-500 font-mono text-xs w-8">#{r.number}</span>
+                          <span className="text-slate-500 font-mono text-xs w-8">#{r.number}</span>
                           <select value={r.domain_name !== null ? 'domain' : 'url'} onChange={e => setRuleMatchKind(idx, e.target.value as 'domain' | 'url')} className={inputCls + ' !w-28'}>
                             <option value="domain">Domain</option>
                             <option value="url">URL path</option>
@@ -844,8 +849,8 @@ export default function HaproxyPage() {
                           {r.domain_name !== null ? (
                             <>
                               <input value={r.domain_name} onChange={e => setRule(idx, { domain_name: e.target.value })} className={inputCls} placeholder="api.example.com" />
-                              <label className="flex items-center gap-1 text-xs text-gray-300 whitespace-nowrap cursor-pointer" title="Also match all subdomains">
-                                <input type="checkbox" checked={r.wildcard_domain} onChange={e => setRule(idx, { wildcard_domain: e.target.checked })} />
+                              <label className="flex items-center gap-1 text-xs text-slate-300 whitespace-nowrap cursor-pointer" title="Also match all subdomains">
+                                <input type="checkbox" checked={r.wildcard_domain} onChange={e => setRule(idx, { wildcard_domain: e.target.checked })} className={checkboxCls} />
                                 wild
                               </label>
                             </>
@@ -859,10 +864,10 @@ export default function HaproxyPage() {
                               <input value={r.url_path || ''} onChange={e => setRule(idx, { url_path: e.target.value })} className={inputCls} placeholder="/api" />
                             </>
                           )}
-                          <button onClick={() => setSvcForm(prev => ({ ...prev, rules: prev.rules.filter((_, i) => i !== idx) }))} className="text-red-400 hover:text-red-300 text-sm px-1" title="Remove rule">✕</button>
+                          <button onClick={() => setSvcForm(prev => ({ ...prev, rules: prev.rules.filter((_, i) => i !== idx) }))} className="text-rose-400 hover:text-rose-300 text-sm px-1" title="Remove rule">✕</button>
                         </div>
                         <div className="flex items-center gap-2">
-                          <span className="text-gray-500 text-xs w-8 text-right">→</span>
+                          <span className="text-slate-500 text-xs w-8 text-right">→</span>
                           <select value={r.backend !== null ? 'backend' : 'redirect'} onChange={e => setRuleActionKind(idx, e.target.value as 'backend' | 'redirect')} className={inputCls + ' !w-28'}>
                             <option value="backend">Backend</option>
                             <option value="redirect">Redirect</option>
@@ -878,7 +883,7 @@ export default function HaproxyPage() {
                         </div>
                         {(svcForm.mode || 'http') === 'http' && (
                           <div className="flex items-center gap-2">
-                            <span className="text-gray-500 text-xs w-8 text-right">geo</span>
+                            <span className="text-slate-500 text-xs w-8 text-right">geo</span>
                             <select
                               value={r.geoip_mode ?? ''}
                               onChange={e => setRule(idx, { geoip_mode: (e.target.value || null) as 'allow' | 'deny' | null })}
@@ -905,7 +910,7 @@ export default function HaproxyPage() {
                 )}
               </div>
               <div className="col-span-2">
-                <label className="block text-sm text-gray-400 mb-1">GeoIP restriction</label>
+                <label className={labelCls}>GeoIP restriction</label>
                 <div className="flex items-start gap-2">
                   <select
                     value={svcForm.geoip_mode || 'off'}
@@ -927,7 +932,7 @@ export default function HaproxyPage() {
                 </div>
               </div>
               <div>
-                <label className="block text-sm text-gray-400 mb-1">TLS certificate</label>
+                <label className={labelCls}>TLS certificate</label>
                 <select
                   value={svcForm.ssl_certificate || ''}
                   onChange={e => {
@@ -946,13 +951,13 @@ export default function HaproxyPage() {
                     <option value={svcForm.ssl_certificate}>{svcForm.ssl_certificate} (not in PKI)</option>
                   )}
                 </select>
-                {certNames.length === 0 && <p className="text-xs text-gray-500 mt-1">No certificates in PKI — add one on the Certificates page</p>}
+                {certNames.length === 0 && <p className={hintText}>No certificates in PKI — add one on the Certificates page</p>}
                 {svcForm.ssl_certificate && (
                   <div className="mt-3">
-                    <label className="block text-sm text-gray-400 mb-1">Additional certificates (SNI)</label>
-                    <div className="max-h-32 overflow-y-auto p-2 bg-gray-900 border border-gray-700 rounded space-y-1">
+                    <label className={labelCls}>Additional certificates (SNI)</label>
+                    <div className="max-h-32 overflow-y-auto p-2 bg-slate-900 border border-slate-700 rounded-lg space-y-1">
                       {certNames.filter(n => n !== svcForm.ssl_certificate).length === 0 && (
-                        <span className="text-xs text-gray-500">No other certificates in PKI</span>
+                        <span className="text-xs text-slate-500">No other certificates in PKI</span>
                       )}
                       {certNames.filter(n => n !== svcForm.ssl_certificate).map(n => (
                         <label key={n} className="flex items-center gap-1.5 text-sm cursor-pointer">
@@ -965,35 +970,36 @@ export default function HaproxyPage() {
                                 ? [...svcForm.ssl_certificates, n]
                                 : svcForm.ssl_certificates.filter(c => c !== n),
                             })}
+                            className={checkboxCls}
                           />
                           <span className="font-mono">{n}</span>
                         </label>
                       ))}
                     </div>
-                    <p className="text-xs text-gray-500 mt-1">picked automatically by requested domain name (SNI); the primary certificate is the default</p>
+                    <p className={hintText}>picked automatically by requested domain name (SNI); the primary certificate is the default</p>
                   </div>
                 )}
               </div>
               <div>
-                <label className="block text-sm text-gray-400 mb-1">Logging facility</label>
+                <label className={labelCls}>Logging facility</label>
                 <select value={svcForm.logging_facility || ''} onChange={e => setSvcForm({ ...svcForm, logging_facility: e.target.value || null })} className={inputCls}>
                   <option value="">off</option>
                   {LOG_FACILITIES.map(f => <option key={f} value={f}>{f}</option>)}
                 </select>
               </div>
               <div>
-                <label className="block text-sm text-gray-400 mb-1">Description</label>
+                <label className={labelCls}>Description</label>
                 <input value={svcForm.description || ''} onChange={e => setSvcForm({ ...svcForm, description: e.target.value || null })} className={inputCls} placeholder="Public web frontend" />
               </div>
-              <label className="flex items-center gap-2 text-sm cursor-pointer self-end pb-2">
-                <input type="checkbox" checked={svcForm.redirect_http_to_https} onChange={e => setSvcForm({ ...svcForm, redirect_http_to_https: e.target.checked })} />
+              <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer self-end pb-2">
+                <input type="checkbox" checked={svcForm.redirect_http_to_https} onChange={e => setSvcForm({ ...svcForm, redirect_http_to_https: e.target.checked })} className={checkboxCls} />
                 <span>Redirect HTTP → HTTPS</span>
               </label>
             </div>
-            {err && <div className="mt-4 p-3 bg-red-900/50 rounded border border-red-700 text-sm text-red-200">{err}</div>}
+            {err && <div className="mt-4 p-3 rounded-lg bg-rose-500/10 border border-rose-500/30 text-sm text-rose-200">{err}</div>}
             <div className="flex justify-end gap-2 mt-6">
-              <button onClick={() => setShowSvcForm(false)} disabled={isWorking('save-svc')} className="px-4 py-2 rounded bg-gray-700 hover:bg-gray-600 disabled:opacity-50">Cancel</button>
-              <button onClick={handleSaveSvc} disabled={isWorking('save-svc')} className="px-4 py-2 rounded bg-blue-600 hover:bg-blue-500 text-white font-medium disabled:opacity-50">
+              <button onClick={() => setShowSvcForm(false)} disabled={isWorking('save-svc')} className={btnSecondary}>Cancel</button>
+              <button onClick={handleSaveSvc} disabled={isWorking('save-svc')} className={btnPrimary}>
                 {isWorking('save-svc') ? 'Saving…' : editSvc !== null ? 'Save Changes' : 'Add Service'}
               </button>
             </div>
@@ -1003,25 +1009,25 @@ export default function HaproxyPage() {
 
       {/* Backend modal */}
       {showBeForm && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-          <div className="bg-gray-800 rounded-xl p-6 w-full max-w-2xl border border-gray-700 shadow-xl max-h-[90vh] overflow-y-auto">
-            <h3 className="text-lg font-bold mb-4">
-              {editBe !== null ? <>Edit backend <span className="text-blue-400">{editBe}</span></> : 'New HAProxy Backend'}
+        <div className={modalOverlay}>
+          <div className={modalCard + ' max-w-2xl max-h-[90vh] overflow-y-auto'}>
+            <h3 className={modalTitle}>
+              {editBe !== null ? <>Edit backend <span className="text-indigo-400">{editBe}</span></> : 'New HAProxy Backend'}
             </h3>
             <div className="grid grid-cols-3 gap-3 mb-4">
               <div>
-                <label className="block text-sm text-gray-400 mb-1">Name</label>
-                <input value={beForm.name} onChange={e => setBeForm({ ...beForm, name: e.target.value })} disabled={editBe !== null} className={inputCls + ' disabled:opacity-50'} placeholder="web-servers" />
+                <label className={labelCls}>Name</label>
+                <input value={beForm.name} onChange={e => setBeForm({ ...beForm, name: e.target.value })} disabled={editBe !== null} className={inputCls} placeholder="web-servers" />
               </div>
               <div>
-                <label className="block text-sm text-gray-400 mb-1">Mode</label>
+                <label className={labelCls}>Mode</label>
                 <select value={beForm.mode || 'http'} onChange={e => setBeForm({ ...beForm, mode: e.target.value as 'http' | 'tcp' })} className={inputCls}>
                   <option value="http">HTTP</option>
                   <option value="tcp">TCP</option>
                 </select>
               </div>
               <div>
-                <label className="block text-sm text-gray-400 mb-1">Balance</label>
+                <label className={labelCls}>Balance</label>
                 <select value={beForm.balance || 'round-robin'} onChange={e => setBeForm({ ...beForm, balance: e.target.value as HaproxyBackend['balance'] })} className={inputCls}>
                   <option value="round-robin">round-robin</option>
                   <option value="least-connection">least-connection</option>
@@ -1029,18 +1035,18 @@ export default function HaproxyPage() {
                 </select>
               </div>
               <div className="col-span-2">
-                <label className="block text-sm text-gray-400 mb-1">Description</label>
+                <label className={labelCls}>Description</label>
                 <input value={beForm.description || ''} onChange={e => setBeForm({ ...beForm, description: e.target.value || null })} className={inputCls} placeholder="Web server pool" />
               </div>
               <div>
-                <label className="block text-sm text-gray-400 mb-1">Logging facility</label>
+                <label className={labelCls}>Logging facility</label>
                 <select value={beForm.logging_facility || ''} onChange={e => setBeForm({ ...beForm, logging_facility: e.target.value || null })} className={inputCls}>
                   <option value="">off</option>
                   {LOG_FACILITIES.map(f => <option key={f} value={f}>{f}</option>)}
                 </select>
               </div>
               <div>
-                <label className="block text-sm text-gray-400 mb-1">Backend TLS (SSL bridging)</label>
+                <label className={labelCls}>Backend TLS (SSL bridging)</label>
                 <select
                   value={beForm.ssl_no_verify ? 'noverify' : beForm.ssl_ca_certificate !== null ? 'ca' : 'plain'}
                   onChange={e => {
@@ -1060,7 +1066,7 @@ export default function HaproxyPage() {
               </div>
               {beForm.ssl_ca_certificate !== null && (
                 <div>
-                  <label className="block text-sm text-gray-400 mb-1">CA certificate</label>
+                  <label className={labelCls}>CA certificate</label>
                   <select value={beForm.ssl_ca_certificate} onChange={e => setBeForm({ ...beForm, ssl_ca_certificate: e.target.value })} className={inputCls}>
                     {caNames.length === 0 && <option value="">— import a CA on the Certificates page —</option>}
                     {caNames.map(n => <option key={n} value={n}>{n}</option>)}
@@ -1073,17 +1079,17 @@ export default function HaproxyPage() {
             </div>
 
             <div className="flex items-center justify-between mb-2">
-              <label className="text-sm text-gray-400 font-medium">Servers</label>
+              <label className="text-sm text-slate-400 font-medium">Servers</label>
               <button
                 onClick={() => setBeForm(prev => ({ ...prev, servers: [...prev.servers, { ...EMPTY_SERVER, name: `srv${prev.servers.length + 1}` }] }))}
-                className="px-2 py-1 bg-gray-700 rounded hover:bg-gray-600 text-xs"
+                className={btnSecondarySm + ' !px-2 !py-1 text-xs'}
               >
                 + Add Server
               </button>
             </div>
             <div className="space-y-2">
               {beForm.servers.map((srv, idx) => (
-                <div key={idx} className="p-3 bg-gray-900 rounded border border-gray-700">
+                <div key={idx} className="p-3 bg-slate-900 rounded-lg border border-slate-700">
                   <div className="grid grid-cols-12 gap-2 items-center">
                     <input value={srv.name} onChange={e => setServer(idx, { name: e.target.value })} className={inputCls + ' col-span-2'} placeholder="name" />
                     <input value={srv.address || ''} onChange={e => setServer(idx, { address: e.target.value || null })} className={inputCls + ' col-span-4'} placeholder="192.168.1.10 or 192.168.1.10:8080" title="IP address. You may enter IP:port — it will be split automatically" />
@@ -1093,27 +1099,27 @@ export default function HaproxyPage() {
                       <button
                         onClick={() => setBeForm(prev => ({ ...prev, servers: prev.servers.filter((_, i) => i !== idx) }))}
                         disabled={beForm.servers.length <= 1}
-                        className="text-red-400 hover:text-red-300 text-sm disabled:opacity-30"
+                        className="text-rose-400 hover:text-rose-300 text-sm disabled:opacity-30"
                       >
                         Remove
                       </button>
                     </div>
                   </div>
-                  <div className="flex flex-wrap gap-4 mt-2 text-xs text-gray-300">
+                  <div className="flex flex-wrap gap-4 mt-2 text-xs text-slate-300">
                     <label className="flex items-center gap-1.5 cursor-pointer">
-                      <input type="checkbox" checked={srv.check} onChange={e => setServer(idx, { check: e.target.checked })} />
+                      <input type="checkbox" checked={srv.check} onChange={e => setServer(idx, { check: e.target.checked })} className={checkboxCls} />
                       <span>Health check</span>
                     </label>
                     <label className="flex items-center gap-1.5 cursor-pointer">
-                      <input type="checkbox" checked={srv.backup} onChange={e => setServer(idx, { backup: e.target.checked })} />
+                      <input type="checkbox" checked={srv.backup} onChange={e => setServer(idx, { backup: e.target.checked })} className={checkboxCls} />
                       <span>Backup</span>
                     </label>
                     <label className="flex items-center gap-1.5 cursor-pointer">
-                      <input type="checkbox" checked={srv.send_proxy} onChange={e => setServer(idx, { send_proxy: e.target.checked, send_proxy_v2: false })} />
+                      <input type="checkbox" checked={srv.send_proxy} onChange={e => setServer(idx, { send_proxy: e.target.checked, send_proxy_v2: false })} className={checkboxCls} />
                       <span>PROXY v1</span>
                     </label>
                     <label className="flex items-center gap-1.5 cursor-pointer">
-                      <input type="checkbox" checked={srv.send_proxy_v2} onChange={e => setServer(idx, { send_proxy_v2: e.target.checked, send_proxy: false })} />
+                      <input type="checkbox" checked={srv.send_proxy_v2} onChange={e => setServer(idx, { send_proxy_v2: e.target.checked, send_proxy: false })} className={checkboxCls} />
                       <span>PROXY v2</span>
                     </label>
                   </div>
@@ -1121,10 +1127,10 @@ export default function HaproxyPage() {
               ))}
             </div>
 
-            {err && <div className="mt-4 p-3 bg-red-900/50 rounded border border-red-700 text-sm text-red-200">{err}</div>}
+            {err && <div className="mt-4 p-3 rounded-lg bg-rose-500/10 border border-rose-500/30 text-sm text-rose-200">{err}</div>}
             <div className="flex justify-end gap-2 mt-6">
-              <button onClick={() => setShowBeForm(false)} disabled={isWorking('save-be')} className="px-4 py-2 rounded bg-gray-700 hover:bg-gray-600 disabled:opacity-50">Cancel</button>
-              <button onClick={handleSaveBe} disabled={isWorking('save-be')} className="px-4 py-2 rounded bg-blue-600 hover:bg-blue-500 text-white font-medium disabled:opacity-50">
+              <button onClick={() => setShowBeForm(false)} disabled={isWorking('save-be')} className={btnSecondary}>Cancel</button>
+              <button onClick={handleSaveBe} disabled={isWorking('save-be')} className={btnPrimary}>
                 {isWorking('save-be') ? 'Saving…' : editBe !== null ? 'Save Changes' : 'Add Backend'}
               </button>
             </div>
@@ -1134,15 +1140,15 @@ export default function HaproxyPage() {
 
       {/* ACME stub modal */}
       {showAcme && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-          <div className="bg-gray-800 rounded-xl p-6 w-full max-w-md border border-gray-700 shadow-xl">
-            <h3 className="text-lg font-bold mb-2">ACME stub (Let's Encrypt)</h3>
-            <p className="text-sm text-gray-400 mb-4">
+        <div className={modalOverlay}>
+          <div className={modalCard + ' max-w-md'}>
+            <h3 className={modalTitle}>ACME stub (Let's Encrypt)</h3>
+            <p className="text-sm text-slate-400 mb-4 -mt-2">
               Creates an HTTP service on port 80 that passes ACME challenges to certbot
               and redirects everything else to HTTPS. Pick the public address that
               receives port-80 traffic. Never binds <code>*:80</code> — certbot needs 127.0.0.1:80.
             </p>
-            <label className="block text-sm text-gray-400 mb-1">Listen address</label>
+            <label className={labelCls}>Listen address</label>
             {acmeAddrs.length > 0 ? (
               <select value={acmeAddr} onChange={e => setAcmeAddr(e.target.value)} className={inputCls}>
                 {acmeAddrs.map(o => (
@@ -1152,10 +1158,10 @@ export default function HaproxyPage() {
             ) : (
               <input value={acmeAddr} onChange={e => setAcmeAddr(e.target.value)} className={inputCls} placeholder="e.g. 203.0.113.10" />
             )}
-            {acmeErr && <div className="mt-3 p-2 bg-red-900/50 rounded border border-red-700 text-sm text-red-200">{acmeErr}</div>}
+            {acmeErr && <div className="mt-3 p-2 rounded-lg bg-rose-500/10 border border-rose-500/30 text-sm text-rose-200">{acmeErr}</div>}
             <div className="flex justify-end gap-2 mt-6">
-              <button onClick={() => setShowAcme(false)} disabled={isWorking('acme-stub')} className="px-4 py-2 rounded bg-gray-700 hover:bg-gray-600 disabled:opacity-50">Cancel</button>
-              <button onClick={handleAcmeStub} disabled={isWorking('acme-stub')} className="px-4 py-2 rounded bg-blue-600 hover:bg-blue-500 text-white font-medium disabled:opacity-50">
+              <button onClick={() => setShowAcme(false)} disabled={isWorking('acme-stub')} className={btnSecondary}>Cancel</button>
+              <button onClick={handleAcmeStub} disabled={isWorking('acme-stub')} className={btnPrimary}>
                 {isWorking('acme-stub') ? 'Creating…' : 'Create stub'}
               </button>
             </div>
@@ -1163,8 +1169,8 @@ export default function HaproxyPage() {
         </div>
       )}
 
-      <div className="mt-6 p-3 bg-gray-800/80 rounded border border-gray-700 text-sm text-gray-300">
-        <strong className="text-white">How it works:</strong> a <strong>service</strong> listens on a port and forwards
+      <div className={hintBox}>
+        <strong className="text-slate-100">How it works:</strong> a <strong>service</strong> listens on a port and forwards
         traffic to a <strong>backend</strong> — a pool of servers with a balancing algorithm. Create a backend first,
         then attach it to a service. Don't forget a matching <strong>input</strong>-chain firewall rule.
       </div>

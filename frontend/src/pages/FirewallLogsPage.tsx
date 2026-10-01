@@ -1,21 +1,23 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { getFirewallLogs } from '../api/client';
 import type { FirewallLogEntry } from '../types';
+import {
+  pageTitle, btnSecondarySm, badgeGreen, badgeRed, badgeAmber,
+  tableWrap, tableCls, theadCls, thSmCls, tbodyCls,
+  alertErr, loadingRow, spinner, filterBar, inputSmCls, checkboxCls,
+} from '../ui';
 
 const ACTION_STYLE: Record<string, string> = {
-  accept: 'bg-green-900 text-green-300',
-  drop: 'bg-red-900 text-red-300',
-  reject: 'bg-yellow-900 text-yellow-300',
+  accept: badgeGreen,
+  drop: badgeRed,
+  reject: badgeAmber,
 };
 
 const ROW_TINT: Record<string, string> = {
-  drop: 'bg-red-900/10',
-  reject: 'bg-yellow-900/10',
-  accept: 'bg-green-900/5',
+  drop: 'bg-rose-500/5',
+  reject: 'bg-amber-500/5',
+  accept: 'bg-emerald-500/[0.03]',
 };
-
-const selectCls = 'px-3 py-1.5 bg-gray-900 border border-gray-700 rounded text-sm focus:outline-none focus:border-blue-500';
-const inputCls = 'px-3 py-1.5 bg-gray-900 border border-gray-700 rounded text-sm focus:outline-none focus:border-blue-500';
 
 export default function FirewallLogsPage() {
   const [entries, setEntries] = useState<FirewallLogEntry[]>([]);
@@ -75,95 +77,95 @@ export default function FirewallLogsPage() {
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-2xl font-bold">Firewall Logs</h2>
-        <button onClick={load} disabled={loading} className="px-3 py-1 bg-gray-700 rounded hover:bg-gray-600 text-sm disabled:opacity-50">
+        <h2 className={pageTitle}>Firewall Logs</h2>
+        <button onClick={load} disabled={loading} className={btnSecondarySm}>
           {loading ? 'Refreshing…' : 'Refresh'}
         </button>
       </div>
 
-      <div className="flex flex-wrap items-center gap-3 mb-4 p-3 bg-gray-800 rounded-lg border border-gray-700">
-        <label className="text-sm text-gray-400">Action</label>
-        <select value={action} onChange={e => setAction(e.target.value)} className={selectCls}>
+      <div className={filterBar}>
+        <label className="text-sm text-slate-400">Action</label>
+        <select value={action} onChange={e => setAction(e.target.value)} className={inputSmCls}>
           <option value="">Any</option>
           <option value="accept">Accept</option>
           <option value="drop">Drop</option>
           <option value="reject">Reject</option>
         </select>
 
-        <label className="text-sm text-gray-400">Proto</label>
-        <select value={proto} onChange={e => setProto(e.target.value)} className={selectCls}>
+        <label className="text-sm text-slate-400">Proto</label>
+        <select value={proto} onChange={e => setProto(e.target.value)} className={inputSmCls}>
           <option value="">Any</option>
           <option value="tcp">TCP</option>
           <option value="udp">UDP</option>
           <option value="icmp">ICMP</option>
         </select>
 
-        <input value={chain} onChange={e => setChain(e.target.value)} placeholder="Chain / ruleset" className={`${inputCls} w-36`} />
-        <input value={src} onChange={e => setSrc(e.target.value)} placeholder="Source IP" className={`${inputCls} w-32`} />
-        <input value={dst} onChange={e => setDst(e.target.value)} placeholder="Dest IP" className={`${inputCls} w-32`} />
-        <input value={port} onChange={e => setPort(e.target.value)} placeholder="Port" className={`${inputCls} w-20`} />
+        <input value={chain} onChange={e => setChain(e.target.value)} placeholder="Chain / ruleset" className={`${inputSmCls} w-36`} />
+        <input value={src} onChange={e => setSrc(e.target.value)} placeholder="Source IP" className={`${inputSmCls} w-32`} />
+        <input value={dst} onChange={e => setDst(e.target.value)} placeholder="Dest IP" className={`${inputSmCls} w-32`} />
+        <input value={port} onChange={e => setPort(e.target.value)} placeholder="Port" className={`${inputSmCls} w-20`} />
 
-        <label className="text-sm text-gray-400">Lines</label>
-        <select value={lines} onChange={e => setLines(Number(e.target.value))} className={selectCls}>
+        <label className="text-sm text-slate-400">Lines</label>
+        <select value={lines} onChange={e => setLines(Number(e.target.value))} className={inputSmCls}>
           {[100, 500, 1000, 2000].map(n => <option key={n} value={n}>{n}</option>)}
         </select>
 
-        <label className="flex items-center gap-2 text-sm text-gray-300 ml-auto">
-          <input type="checkbox" checked={autoRefresh} onChange={e => setAutoRefresh(e.target.checked)} />
+        <label className="flex items-center gap-2 text-sm text-slate-300 ml-auto cursor-pointer">
+          <input type="checkbox" checked={autoRefresh} onChange={e => setAutoRefresh(e.target.checked)} className={checkboxCls} />
           Auto-refresh
         </label>
         {autoRefresh && (
-          <select value={intervalSec} onChange={e => setIntervalSec(Number(e.target.value))} className={selectCls}>
+          <select value={intervalSec} onChange={e => setIntervalSec(Number(e.target.value))} className={inputSmCls}>
             {[2, 5, 10].map(n => <option key={n} value={n}>{n}s</option>)}
           </select>
         )}
       </div>
 
-      {err && <div className="mb-4 p-3 bg-red-900/50 rounded border border-red-700 text-sm text-red-200">{err}</div>}
+      {err && <div className={alertErr}>{err}</div>}
 
       {loading && entries.length === 0 ? (
-        <div className="flex items-center gap-2 text-gray-400">
-          <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/></svg>
+        <div className={loadingRow}>
+          <svg className={spinner} viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/></svg>
           Loading firewall logs…
         </div>
       ) : entries.length === 0 ? (
-        <div className="text-gray-400 text-sm">
+        <div className="text-slate-400 text-sm">
           No firewall log entries. Enable «Log matching packets» on firewall rules to see traffic here.
         </div>
       ) : (
         <>
-          <div className="text-sm text-gray-400 mb-2">{entries.length} entries (newest first)</div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border border-gray-700 rounded-lg overflow-hidden">
-              <thead className="bg-gray-800">
+          <div className="text-sm text-slate-400 mb-2">{entries.length} entries (newest first)</div>
+          <div className={tableWrap}>
+            <table className={tableCls}>
+              <thead className={theadCls}>
                 <tr>
-                  <th className="px-3 py-2 whitespace-nowrap">Time</th>
-                  <th className="px-3 py-2">Action</th>
-                  <th className="px-3 py-2">Chain</th>
-                  <th className="px-3 py-2">Rule</th>
-                  <th className="px-3 py-2">Source</th>
-                  <th className="px-3 py-2">Destination</th>
-                  <th className="px-3 py-2">Proto</th>
-                  <th className="px-3 py-2">Iface</th>
+                  <th className={thSmCls + ' whitespace-nowrap'}>Time</th>
+                  <th className={thSmCls}>Action</th>
+                  <th className={thSmCls}>Chain</th>
+                  <th className={thSmCls}>Rule</th>
+                  <th className={thSmCls}>Source</th>
+                  <th className={thSmCls}>Destination</th>
+                  <th className={thSmCls}>Proto</th>
+                  <th className={thSmCls}>Iface</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-700/50">
+              <tbody className={tbodyCls}>
                 {entries.map((e, i) => (
-                  <tr key={i} title={e.raw} className={`hover:bg-gray-800/50 ${ROW_TINT[e.action || ''] || ''}`}>
-                    <td className="px-3 py-1.5 font-mono text-xs text-gray-400 whitespace-nowrap">{e.timestamp || '-'}</td>
+                  <tr key={i} title={e.raw} className={`hover:bg-slate-800/40 transition-colors ${ROW_TINT[e.action || ''] || ''}`}>
+                    <td className="px-3 py-1.5 font-mono text-xs text-slate-400 whitespace-nowrap">{e.timestamp || '-'}</td>
                     <td className="px-3 py-1.5">
                       {e.action ? (
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${ACTION_STYLE[e.action]}`}>
+                        <span className={ACTION_STYLE[e.action]}>
                           {e.action}
                         </span>
                       ) : '-'}
                     </td>
-                    <td className="px-3 py-1.5 font-mono text-xs">{e.chain || '-'}</td>
-                    <td className="px-3 py-1.5 font-mono text-xs">{e.rule_number ?? '-'}</td>
-                    <td className="px-3 py-1.5 font-mono text-xs whitespace-nowrap">{e.src || '-'}{e.spt ? `:${e.spt}` : ''}</td>
-                    <td className="px-3 py-1.5 font-mono text-xs whitespace-nowrap">{e.dst || '-'}{e.dpt ? `:${e.dpt}` : ''}</td>
-                    <td className="px-3 py-1.5 text-xs">{e.proto || '-'}</td>
-                    <td className="px-3 py-1.5 font-mono text-xs text-gray-400">{e.iface_in || '-'}{e.iface_out ? ` → ${e.iface_out}` : ''}</td>
+                    <td className="px-3 py-1.5 font-mono text-xs text-slate-300">{e.chain || '-'}</td>
+                    <td className="px-3 py-1.5 font-mono text-xs text-slate-300">{e.rule_number ?? '-'}</td>
+                    <td className="px-3 py-1.5 font-mono text-xs whitespace-nowrap text-slate-300">{e.src || '-'}{e.spt ? `:${e.spt}` : ''}</td>
+                    <td className="px-3 py-1.5 font-mono text-xs whitespace-nowrap text-slate-300">{e.dst || '-'}{e.dpt ? `:${e.dpt}` : ''}</td>
+                    <td className="px-3 py-1.5 text-xs text-slate-300">{e.proto || '-'}</td>
+                    <td className="px-3 py-1.5 font-mono text-xs text-slate-400">{e.iface_in || '-'}{e.iface_out ? ` → ${e.iface_out}` : ''}</td>
                   </tr>
                 ))}
               </tbody>

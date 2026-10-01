@@ -1,5 +1,6 @@
 import { FormEvent, useState } from 'react';
 import { login, setupPassword } from '../api/client';
+import { inputCls, labelCls, btnPrimary } from '../ui';
 
 export default function LoginPage({ mode, onDone }: { mode: 'setup' | 'login'; onDone: () => void }) {
   const [username, setUsername] = useState('admin');
@@ -39,52 +40,59 @@ export default function LoginPage({ mode, onDone }: { mode: 'setup' | 'login'; o
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-900">
-      <form onSubmit={submit} className="w-full max-w-sm bg-gray-800 border border-gray-700 rounded-xl p-8 shadow-lg">
-        <h1 className="text-xl font-bold text-white mb-1">VyOS Web Gateway</h1>
-        <p className="text-sm text-gray-400 mb-6">
+    <div className="min-h-screen flex items-center justify-center bg-slate-900 px-4">
+      <form onSubmit={submit} className="w-full max-w-sm bg-slate-800/60 border border-slate-700/60 rounded-xl p-8 shadow-sm">
+        <div className="flex items-center gap-2.5 mb-1">
+          <div className="h-8 w-8 rounded-lg bg-indigo-600 flex items-center justify-center">
+            <svg className="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
+            </svg>
+          </div>
+          <h1 className="text-xl font-semibold text-slate-100">VyOS GW</h1>
+        </div>
+        <p className="text-sm text-slate-400 mb-6 mt-2">
           {isSetup
             ? 'First run — create the local administrator password for this console.'
             : 'Sign in to the management console.'}
         </p>
 
-        <label className="block text-xs font-medium text-gray-400 mb-1">Username</label>
+        <label className={labelCls}>Username</label>
         <input
           value={username}
           onChange={e => setUsername(e.target.value)}
           autoComplete="username"
-          className="w-full mb-4 px-3 py-2 rounded bg-gray-900 border border-gray-600 text-white focus:border-blue-500 focus:outline-none"
+          className={inputCls + ' mb-4'}
         />
 
-        <label className="block text-xs font-medium text-gray-400 mb-1">Password</label>
+        <label className={labelCls}>Password</label>
         <input
           type="password"
           value={password}
           onChange={e => setPassword(e.target.value)}
           autoComplete={isSetup ? 'new-password' : 'current-password'}
           autoFocus
-          className="w-full mb-4 px-3 py-2 rounded bg-gray-900 border border-gray-600 text-white focus:border-blue-500 focus:outline-none"
+          className={inputCls + ' mb-4'}
         />
 
         {isSetup && (
           <>
-            <label className="block text-xs font-medium text-gray-400 mb-1">Confirm password</label>
+            <label className={labelCls}>Confirm password</label>
             <input
               type="password"
               value={confirm}
               onChange={e => setConfirm(e.target.value)}
               autoComplete="new-password"
-              className="w-full mb-4 px-3 py-2 rounded bg-gray-900 border border-gray-600 text-white focus:border-blue-500 focus:outline-none"
+              className={inputCls + ' mb-4'}
             />
           </>
         )}
 
-        {error && <div className="mb-4 text-sm text-red-400">{error}</div>}
+        {error && <div className="mb-4 text-sm text-rose-400">{error}</div>}
 
         <button
           type="submit"
           disabled={busy || !username || !password}
-          className="w-full py-2 rounded bg-blue-600 hover:bg-blue-500 text-white font-medium disabled:opacity-50"
+          className={btnPrimary + ' w-full'}
         >
           {busy ? 'Please wait…' : isSetup ? 'Create password' : 'Sign in'}
         </button>
