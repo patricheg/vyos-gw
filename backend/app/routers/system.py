@@ -59,6 +59,20 @@ async def update_system(data: SystemConfig):
     return {"status": "staged", "changes": len(commands)}
 
 
+@router.post("/reboot")
+async def reboot_device():
+    """Reboot the device. The connection drops as it goes down — expected."""
+    await asyncio.to_thread(vyos_client.reboot)
+    return {"status": "ok"}
+
+
+@router.post("/shutdown")
+async def shutdown_device():
+    """Power off the device. The connection drops as it goes down — expected."""
+    await asyncio.to_thread(vyos_client.poweroff)
+    return {"status": "ok"}
+
+
 @router.post("/save")
 async def save_config():
     """Write the running configuration to /config/config.boot on the device."""

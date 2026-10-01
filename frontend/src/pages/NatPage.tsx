@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { getNatRules, addNatRule, updateNatRule, deleteNatRule, toggleNatRule, getInterfaces, getSourceNatRules, addSourceNatRule, updateSourceNatRule, deleteSourceNatRule, toggleSourceNatRule } from '../api/client';
-import type { NatRule, SourceNatRule } from '../types';
+import { getNatRules, addNatRule, updateNatRule, deleteNatRule, toggleNatRule, getInterfaces, getSourceNatRules, addSourceNatRule, updateSourceNatRule, deleteSourceNatRule, toggleSourceNatRule, getNatCounters, getAddressGroups } from '../api/client';
+import type { NatRule, SourceNatRule, NatCounters, AddressGroup, RuleCounterMap } from '../types';
+import { humanCount, humanBytes } from '../format';
 
 const inputCls = 'w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded focus:outline-none focus:border-blue-500';
 
@@ -10,6 +11,8 @@ const EMPTY_RULE: NatRule = {
   protocol: 'tcp',
   source_address: null,
   destination_address: null,
+  source_address_group: null,
+  destination_address_group: null,
   destination_port: null,
   inbound_interface: null,
   translation_address: null,
@@ -28,6 +31,10 @@ export default function NatPage() {
   const [form, setForm] = useState<NatRule>(EMPTY_RULE);
   const [editNumber, setEditNumber] = useState<number | null>(null);
   const [working, setWorking] = useState<string | null>(null);
+  const [counters, setCounters] = useState<NatCounters>({ destination: {}, source: {} });
+  const [groups, setGroups] = useState<AddressGroup[]>([]);
+  const [srcKind, setSrcKind] = useState<'address' | 'group'>('address');
+  const [dstKind, setDstKind] = useState<'address' | 'group'>('address');
 
   const load = () => {
     setLoading(true);
@@ -39,6 +46,13 @@ export default function NatPage() {
       })
       .catch(e => setErr('Load error: ' + e.message))
       .finally(() => setLoading(false));
+    // counter errors are ignored — the column just stays empty
+    getNatCounters()
+      .then(setCounters)
+      .catch(() => {});
+    getAddressGroups()
+      .then(setGroups)
+      .catch(() => setGroups([]));
   };
 
   useEffect(() => { load(); }, []);
@@ -56,6 +70,8 @@ export default function NatPage() {
     const maxNum = rules.length > 0 ? Math.max(...rules.map(r => r.number)) : 0;
     setForm({ ...EMPTY_RULE, number: maxNum > 0 ? maxNum + 10 : 10 });
     setEditNumber(null);
+    setSrcKind('address');
+    setDstKind('address');
     setErr('');
     setMsg('');
     setShowForm(true);
@@ -64,6 +80,8 @@ export default function NatPage() {
   const openEdit = (rule: NatRule) => {
     setForm({ ...rule, protocol: rule.protocol || 'tcp' });
     setEditNumber(rule.number);
+    setSrcKind(rule.source_address_group ? 'group' : 'address');
+    setDstKind(rule.destination_address_group ? 'group' : 'address');
     setErr('');
     setMsg('');
     setShowForm(true);
@@ -72,8 +90,10 @@ export default function NatPage() {
   const buildRule = (): NatRule => ({
     ...form,
     protocol: form.protocol === 'all' ? null : form.protocol,
-    source_address: form.source_address || null,
-    destination_address: form.destination_address || null,
+    source_address: srcKind === 'address' ? (form.source_address || null) : null,
+    source_address_group: srcKind === 'group' ? (form.source_address_group || null) : null,
+    destination_address: dstKind === 'address' ? (form.destination_address || null) : null,
+    destination_address_group: dstKind === 'group' ? (form.destination_address_group || null) : null,
     destination_port: form.destination_port || null,
     inbound_interface: form.inbound_interface || null,
     translation_address: form.translation_address || null,
@@ -158,12 +178,6 @@ export default function NatPage() {
         </div>
       </div>
 
-      <div className="mb-4 p-3 bg-gray-800/80 rounded border border-gray-700 text-sm text-gray-300">
-        <strong className="text-white">Destination NAT (port forwarding):</strong> incoming traffic to
-        <em> destination address:port</em> on the chosen inbound interface is redirected to the
-        <em> translation address:port</em>. Don't forget a matching <strong>forward</strong>-chain firewall rule.
-      </div>
-
       {err && <div className="mb-4 p-3 bg-red-900/50 rounded border border-red-700 text-sm text-red-200">{err}</div>}
       {msg && <div className="mb-4 p-3 bg-green-900/50 rounded border border-green-700 text-sm text-green-200">{msg}</div>}
 
@@ -188,17 +202,22 @@ export default function NatPage() {
                 <th className="px-4 py-3">Destination</th>
                 <th className="px-4 py-3">→ Translation</th>
                 <th className="px-4 py-3">Description</th>
+                <th className="px-4 py-3">Packets</th>
                 <th className="px-4 py-3"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-700">
-              {rules.map(r => (
+              {rules.map(r => {
+                const counter = counters.destination[String(r.number)];
+                return (
                 <tr key={r.number} className={`hover:bg-gray-800/50 ${r.disabled ? 'opacity-50' : ''}`}>
                   <td className="px-4 py-2.5 font-mono text-gray-300">{r.number}</td>
                   <td className="px-4 py-2.5 font-mono text-sm">{r.inbound_interface || 'any'}</td>
                   <td className="px-4 py-2.5 text-sm">{r.protocol || 'all'}</td>
                   <td className="px-4 py-2.5 font-mono text-xs">
-                    {r.destination_address || 'any'}{r.destination_port ? `:${r.destination_port}` : ''}
+                    {r.destination_address_group
+                      ? <span className="text-violet-300">@{r.destination_address_group}</span>
+                      : r.destination_address || 'any'}{r.destination_port ? `:${r.destination_port}` : ''}
                   </td>
                   <td className="px-4 py-2.5 font-mono text-xs text-green-300">
                     {r.translation_address || '-'}{r.translation_port ? `:${r.translation_port}` : ''}
@@ -207,6 +226,12 @@ export default function NatPage() {
                     {r.description || '-'}
                     {r.log && <span className="ml-2 px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-900 text-blue-300 align-middle">LOG</span>}
                     {r.disabled && <span className="ml-2 px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-700 text-gray-400 align-middle">OFF</span>}
+                  </td>
+                  <td
+                    className="px-4 py-2.5 font-mono text-xs text-gray-500 whitespace-nowrap"
+                    title={counter ? `${counter.packets.toLocaleString()} packets / ${counter.bytes.toLocaleString()} bytes` : undefined}
+                  >
+                    {counter ? `${humanCount(counter.packets)} / ${humanBytes(counter.bytes)}` : ''}
                   </td>
                   <td className="px-4 py-2.5 text-right whitespace-nowrap">
                     <button
@@ -223,7 +248,8 @@ export default function NatPage() {
                     </button>
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -258,11 +284,41 @@ export default function NatPage() {
               </div>
               <div>
                 <label className="block text-sm text-gray-400 mb-1">Source Address</label>
-                <input value={form.source_address || ''} onChange={e => setForm({ ...form, source_address: e.target.value || null })} className={inputCls} placeholder="any" />
+                <select value={srcKind} onChange={e => {
+                  const k = e.target.value as 'address' | 'group';
+                  setSrcKind(k);
+                  setForm({ ...form, source_address: k === 'address' ? form.source_address : null, source_address_group: k === 'group' ? form.source_address_group : null });
+                }} className={inputCls}>
+                  <option value="address">Address</option>
+                  <option value="group">Group</option>
+                </select>
+                {srcKind === 'address' ? (
+                  <input value={form.source_address || ''} onChange={e => setForm({ ...form, source_address: e.target.value || null })} className={inputCls + ' mt-2'} placeholder="any" />
+                ) : (
+                  <select value={form.source_address_group || ''} onChange={e => setForm({ ...form, source_address_group: e.target.value || null })} className={inputCls + ' mt-2'}>
+                    <option value="">— select group —</option>
+                    {groups.map(g => <option key={g.name} value={g.name}>@{g.name} ({g.addresses.length})</option>)}
+                  </select>
+                )}
               </div>
               <div>
                 <label className="block text-sm text-gray-400 mb-1">Destination Address</label>
-                <input value={form.destination_address || ''} onChange={e => setForm({ ...form, destination_address: e.target.value || null })} className={inputCls} placeholder="any (router's WAN IP)" />
+                <select value={dstKind} onChange={e => {
+                  const k = e.target.value as 'address' | 'group';
+                  setDstKind(k);
+                  setForm({ ...form, destination_address: k === 'address' ? form.destination_address : null, destination_address_group: k === 'group' ? form.destination_address_group : null });
+                }} className={inputCls}>
+                  <option value="address">Address</option>
+                  <option value="group">Group</option>
+                </select>
+                {dstKind === 'address' ? (
+                  <input value={form.destination_address || ''} onChange={e => setForm({ ...form, destination_address: e.target.value || null })} className={inputCls + ' mt-2'} placeholder="any (router's WAN IP)" />
+                ) : (
+                  <select value={form.destination_address_group || ''} onChange={e => setForm({ ...form, destination_address_group: e.target.value || null })} className={inputCls + ' mt-2'}>
+                    <option value="">— select group —</option>
+                    {groups.map(g => <option key={g.name} value={g.name}>@{g.name} ({g.addresses.length})</option>)}
+                  </select>
+                )}
               </div>
               <div>
                 <label className="block text-sm text-gray-400 mb-1">Destination Port</label>
@@ -295,7 +351,13 @@ export default function NatPage() {
         </div>
       )}
 
-      <SourceNatSection ifaceNames={ifaceNames} />
+      <SourceNatSection ifaceNames={ifaceNames} counters={counters.source} groups={groups} />
+
+      <div className="mt-6 p-3 bg-gray-800/80 rounded border border-gray-700 text-sm text-gray-300">
+        <strong className="text-white">Destination NAT (port forwarding):</strong> incoming traffic to
+        <em> destination address:port</em> on the chosen inbound interface is redirected to the
+        <em> translation address:port</em>. Don't forget a matching <strong>forward</strong>-chain firewall rule.
+      </div>
     </div>
   );
 }
@@ -306,6 +368,8 @@ const EMPTY_SNAT_RULE: SourceNatRule = {
   protocol: 'all',
   source_address: null,
   destination_address: null,
+  source_address_group: null,
+  destination_address_group: null,
   destination_port: null,
   outbound_interface: null,
   translation_address: 'masquerade',
@@ -314,7 +378,7 @@ const EMPTY_SNAT_RULE: SourceNatRule = {
   disabled: false,
 };
 
-function SourceNatSection({ ifaceNames }: { ifaceNames: string[] }) {
+function SourceNatSection({ ifaceNames, counters, groups }: { ifaceNames: string[]; counters: RuleCounterMap; groups: AddressGroup[] }) {
   const [rules, setRules] = useState<SourceNatRule[]>([]);
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState('');
@@ -323,6 +387,8 @@ function SourceNatSection({ ifaceNames }: { ifaceNames: string[] }) {
   const [form, setForm] = useState<SourceNatRule>(EMPTY_SNAT_RULE);
   const [editNumber, setEditNumber] = useState<number | null>(null);
   const [working, setWorking] = useState<string | null>(null);
+  const [srcKind, setSrcKind] = useState<'address' | 'group'>('address');
+  const [dstKind, setDstKind] = useState<'address' | 'group'>('address');
 
   const load = () => {
     setLoading(true);
@@ -348,6 +414,8 @@ function SourceNatSection({ ifaceNames }: { ifaceNames: string[] }) {
     const maxNum = rules.length > 0 ? Math.max(...rules.map(r => r.number)) : 0;
     setForm({ ...EMPTY_SNAT_RULE, number: maxNum > 0 ? maxNum + 10 : 100 });
     setEditNumber(null);
+    setSrcKind('address');
+    setDstKind('address');
     setErr('');
     setMsg('');
     setShowForm(true);
@@ -356,6 +424,8 @@ function SourceNatSection({ ifaceNames }: { ifaceNames: string[] }) {
   const openEdit = (rule: SourceNatRule) => {
     setForm({ ...rule, protocol: rule.protocol || 'all' });
     setEditNumber(rule.number);
+    setSrcKind(rule.source_address_group ? 'group' : 'address');
+    setDstKind(rule.destination_address_group ? 'group' : 'address');
     setErr('');
     setMsg('');
     setShowForm(true);
@@ -364,8 +434,10 @@ function SourceNatSection({ ifaceNames }: { ifaceNames: string[] }) {
   const buildRule = (): SourceNatRule => ({
     ...form,
     protocol: form.protocol === 'all' ? null : form.protocol,
-    source_address: form.source_address || null,
-    destination_address: form.destination_address || null,
+    source_address: srcKind === 'address' ? (form.source_address || null) : null,
+    source_address_group: srcKind === 'group' ? (form.source_address_group || null) : null,
+    destination_address: dstKind === 'address' ? (form.destination_address || null) : null,
+    destination_address_group: dstKind === 'group' ? (form.destination_address_group || null) : null,
     destination_port: form.destination_port || null,
     outbound_interface: form.outbound_interface || null,
     translation_address: form.translation_address || null,
@@ -451,12 +523,6 @@ function SourceNatSection({ ifaceNames }: { ifaceNames: string[] }) {
         </div>
       </div>
 
-      <div className="mb-4 p-3 bg-gray-800/80 rounded border border-gray-700 text-sm text-gray-300">
-        <strong className="text-white">Source NAT (masquerade / SNAT):</strong> outgoing traffic from
-        <em> source address</em> leaving via the chosen outbound interface gets its source rewritten to
-        <em> translation address</em>. Use <strong>masquerade</strong> to let LAN hosts reach the internet.
-      </div>
-
       {err && <div className="mb-4 p-3 bg-red-900/50 rounded border border-red-700 text-sm text-red-200">{err}</div>}
       {msg && <div className="mb-4 p-3 bg-green-900/50 rounded border border-green-700 text-sm text-green-200">{msg}</div>}
 
@@ -482,18 +548,27 @@ function SourceNatSection({ ifaceNames }: { ifaceNames: string[] }) {
                 <th className="px-4 py-3">Destination</th>
                 <th className="px-4 py-3">→ Translation</th>
                 <th className="px-4 py-3">Description</th>
+                <th className="px-4 py-3">Packets</th>
                 <th className="px-4 py-3"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-700">
-              {rules.map(r => (
+              {rules.map(r => {
+                const counter = counters[String(r.number)];
+                return (
                 <tr key={r.number} className={`hover:bg-gray-800/50 ${r.disabled ? 'opacity-50' : ''}`}>
                   <td className="px-4 py-2.5 font-mono text-gray-300">{r.number}</td>
                   <td className="px-4 py-2.5 font-mono text-sm">{r.outbound_interface || 'any'}</td>
                   <td className="px-4 py-2.5 text-sm">{r.protocol || 'all'}</td>
-                  <td className="px-4 py-2.5 font-mono text-xs">{r.source_address || 'any'}</td>
                   <td className="px-4 py-2.5 font-mono text-xs">
-                    {r.destination_address || 'any'}{r.destination_port ? `:${r.destination_port}` : ''}
+                    {r.source_address_group
+                      ? <span className="text-violet-300">@{r.source_address_group}</span>
+                      : r.source_address || 'any'}
+                  </td>
+                  <td className="px-4 py-2.5 font-mono text-xs">
+                    {r.destination_address_group
+                      ? <span className="text-violet-300">@{r.destination_address_group}</span>
+                      : r.destination_address || 'any'}{r.destination_port ? `:${r.destination_port}` : ''}
                   </td>
                   <td className="px-4 py-2.5 font-mono text-xs text-green-300">
                     {r.translation_address === 'masquerade'
@@ -504,6 +579,12 @@ function SourceNatSection({ ifaceNames }: { ifaceNames: string[] }) {
                     {r.description || '-'}
                     {r.log && <span className="ml-2 px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-900 text-blue-300 align-middle">LOG</span>}
                     {r.disabled && <span className="ml-2 px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-700 text-gray-400 align-middle">OFF</span>}
+                  </td>
+                  <td
+                    className="px-4 py-2.5 font-mono text-xs text-gray-500 whitespace-nowrap"
+                    title={counter ? `${counter.packets.toLocaleString()} packets / ${counter.bytes.toLocaleString()} bytes` : undefined}
+                  >
+                    {counter ? `${humanCount(counter.packets)} / ${humanBytes(counter.bytes)}` : ''}
                   </td>
                   <td className="px-4 py-2.5 text-right whitespace-nowrap">
                     <button
@@ -520,7 +601,8 @@ function SourceNatSection({ ifaceNames }: { ifaceNames: string[] }) {
                     </button>
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -555,11 +637,41 @@ function SourceNatSection({ ifaceNames }: { ifaceNames: string[] }) {
               </div>
               <div>
                 <label className="block text-sm text-gray-400 mb-1">Source Address</label>
-                <input value={form.source_address || ''} onChange={e => setForm({ ...form, source_address: e.target.value || null })} className={inputCls} placeholder="192.168.1.0/24" />
+                <select value={srcKind} onChange={e => {
+                  const k = e.target.value as 'address' | 'group';
+                  setSrcKind(k);
+                  setForm({ ...form, source_address: k === 'address' ? form.source_address : null, source_address_group: k === 'group' ? form.source_address_group : null });
+                }} className={inputCls}>
+                  <option value="address">Address</option>
+                  <option value="group">Group</option>
+                </select>
+                {srcKind === 'address' ? (
+                  <input value={form.source_address || ''} onChange={e => setForm({ ...form, source_address: e.target.value || null })} className={inputCls + ' mt-2'} placeholder="192.168.1.0/24" />
+                ) : (
+                  <select value={form.source_address_group || ''} onChange={e => setForm({ ...form, source_address_group: e.target.value || null })} className={inputCls + ' mt-2'}>
+                    <option value="">— select group —</option>
+                    {groups.map(g => <option key={g.name} value={g.name}>@{g.name} ({g.addresses.length})</option>)}
+                  </select>
+                )}
               </div>
               <div>
                 <label className="block text-sm text-gray-400 mb-1">Destination Address</label>
-                <input value={form.destination_address || ''} onChange={e => setForm({ ...form, destination_address: e.target.value || null })} className={inputCls} placeholder="any" />
+                <select value={dstKind} onChange={e => {
+                  const k = e.target.value as 'address' | 'group';
+                  setDstKind(k);
+                  setForm({ ...form, destination_address: k === 'address' ? form.destination_address : null, destination_address_group: k === 'group' ? form.destination_address_group : null });
+                }} className={inputCls}>
+                  <option value="address">Address</option>
+                  <option value="group">Group</option>
+                </select>
+                {dstKind === 'address' ? (
+                  <input value={form.destination_address || ''} onChange={e => setForm({ ...form, destination_address: e.target.value || null })} className={inputCls + ' mt-2'} placeholder="any" />
+                ) : (
+                  <select value={form.destination_address_group || ''} onChange={e => setForm({ ...form, destination_address_group: e.target.value || null })} className={inputCls + ' mt-2'}>
+                    <option value="">— select group —</option>
+                    {groups.map(g => <option key={g.name} value={g.name}>@{g.name} ({g.addresses.length})</option>)}
+                  </select>
+                )}
               </div>
               <div>
                 <label className="block text-sm text-gray-400 mb-1">Destination Port</label>
@@ -604,6 +716,12 @@ function SourceNatSection({ ifaceNames }: { ifaceNames: string[] }) {
           </div>
         </div>
       )}
+
+      <div className="mt-6 p-3 bg-gray-800/80 rounded border border-gray-700 text-sm text-gray-300">
+        <strong className="text-white">Source NAT (masquerade / SNAT):</strong> outgoing traffic from
+        <em> source address</em> leaving via the chosen outbound interface gets its source rewritten to
+        <em> translation address</em>. Use <strong>masquerade</strong> to let LAN hosts reach the internet.
+      </div>
     </div>
   );
 }

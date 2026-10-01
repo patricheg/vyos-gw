@@ -67,6 +67,9 @@ class NatRuleBase(BaseModel):
     protocol: Optional[str] = None
     source_address: Optional[str] = None
     destination_address: Optional[str] = None
+    # address-group names (mutually exclusive with the plain address fields)
+    source_address_group: Optional[str] = None
+    destination_address_group: Optional[str] = None
     destination_port: Optional[str] = None
     inbound_interface: Optional[str] = None
     translation_address: Optional[str] = None
@@ -86,6 +89,9 @@ class SourceNatRuleBase(BaseModel):
     protocol: Optional[str] = None
     source_address: Optional[str] = None
     destination_address: Optional[str] = None
+    # address-group names (mutually exclusive with the plain address fields)
+    source_address_group: Optional[str] = None
+    destination_address_group: Optional[str] = None
     destination_port: Optional[str] = None
     outbound_interface: Optional[str] = None
     # "masquerade" or an IPv4 address

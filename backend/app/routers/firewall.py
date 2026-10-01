@@ -54,6 +54,12 @@ def _validate_rule(rule: FirewallRuleCreate):
                 raise HTTPException(status_code=400, detail=f"{side}: '{cc}' is not a valid 2-letter country code (lowercase, e.g. 'by')")
 
 
+@router.get("/counters")
+async def firewall_counters():
+    """Per-rule packet/byte counters: {"<chain>": {"<rule>": {"packets", "bytes"}}}."""
+    return await asyncio.to_thread(vyos_client.get_firewall_counters)
+
+
 @router.get("/chains", response_model=List[FirewallRuleset])
 async def list_chains():
     return await asyncio.to_thread(vyos_client.get_firewall_chains)

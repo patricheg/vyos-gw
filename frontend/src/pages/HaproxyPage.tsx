@@ -510,12 +510,6 @@ export default function HaproxyPage() {
         </div>
       </div>
 
-      <div className="mb-4 p-3 bg-gray-800/80 rounded border border-gray-700 text-sm text-gray-300">
-        <strong className="text-white">How it works:</strong> a <strong>service</strong> listens on a port and forwards
-        traffic to a <strong>backend</strong> — a pool of servers with a balancing algorithm. Create a backend first,
-        then attach it to a service. Don't forget a matching <strong>input</strong>-chain firewall rule.
-      </div>
-
       {err && <div className="mb-4 p-3 bg-red-900/50 rounded border border-red-700 text-sm text-red-200">{err}</div>}
       {msg && <div className="mb-4 p-3 bg-green-900/50 rounded border border-green-700 text-sm text-green-200">{msg}</div>}
 
@@ -1168,6 +1162,12 @@ export default function HaproxyPage() {
           </div>
         </div>
       )}
+
+      <div className="mt-6 p-3 bg-gray-800/80 rounded border border-gray-700 text-sm text-gray-300">
+        <strong className="text-white">How it works:</strong> a <strong>service</strong> listens on a port and forwards
+        traffic to a <strong>backend</strong> — a pool of servers with a balancing algorithm. Create a backend first,
+        then attach it to a service. Don't forget a matching <strong>input</strong>-chain firewall rule.
+      </div>
     </div>
   );
 }

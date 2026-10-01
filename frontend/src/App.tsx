@@ -4,6 +4,7 @@ import Layout from './components/Layout';
 import LoginPage from './pages/LoginPage';
 import InterfacesPage from './pages/InterfacesPage';
 import FirewallPage from './pages/FirewallPage';
+import AddressGroupsPage from './pages/AddressGroupsPage';
 import NatPage from './pages/NatPage';
 import RoutesPage from './pages/RoutesPage';
 import HaproxyPage from './pages/HaproxyPage';
@@ -57,6 +58,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<InterfacesPage />} />
         <Route path="/firewall" element={<FirewallPage />} />
+        <Route path="/address-groups" element={<AddressGroupsPage />} />
         <Route path="/nat" element={<NatPage />} />
         <Route path="/routes" element={<RoutesPage />} />
         <Route path="/haproxy" element={<HaproxyPage />} />

@@ -258,12 +258,6 @@ export default function CertificatesPage() {
         </div>
       </div>
 
-      <div className="mb-4 p-3 bg-gray-800/80 rounded border border-gray-700 text-sm text-gray-300">
-        <strong className="text-white">Let's Encrypt note:</strong> committing an ACME certificate makes the router run
-        certbot immediately — the domain must point to the router and port <strong>80 must be reachable from the Internet</strong>
-        (HTTP-01 challenge; don't forget an input-chain firewall rule). VyOS renews ACME certificates automatically.
-      </div>
-
       {err && <div className="mb-4 p-3 bg-red-900/50 rounded border border-red-700 text-sm text-red-200 whitespace-pre-wrap">{err}</div>}
       {msg && <div className="mb-4 p-3 bg-green-900/50 rounded border border-green-700 text-sm text-green-200">{msg}</div>}
 
@@ -488,6 +482,12 @@ export default function CertificatesPage() {
           </div>
         </div>
       )}
+
+      <div className="mt-6 p-3 bg-gray-800/80 rounded border border-gray-700 text-sm text-gray-300">
+        <strong className="text-white">Let's Encrypt note:</strong> committing an ACME certificate makes the router run
+        certbot immediately — the domain must point to the router and port <strong>80 must be reachable from the Internet</strong>
+        (HTTP-01 challenge; don't forget an input-chain firewall rule). VyOS renews ACME certificates automatically.
+      </div>
     </div>
   );
 }

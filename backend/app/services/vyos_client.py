@@ -305,6 +305,70 @@ class VyOSClient:
         groups.sort(key=lambda g: g.name)
         return groups
 
+    # ─── Rule counters (op-mode) ──────────────────────────────────
+
+    def get_firewall_counters(self) -> Dict[str, Dict[str, Dict[str, int]]]:
+        """Per-rule packet/byte counters parsed from `show firewall`.
+
+        Returns {"<ruleset>": {"<rule>": {"packets": N, "bytes": M}}};
+        "input filter" is normalized to "input" to match chain names.
+        Best-effort: any failure yields an empty result.
+        """
+        try:
+            output = self._post("/show", {"op": "show", "path": ["firewall"]}) or ""
+        except VyOSError:
+            return {}
+        result: Dict[str, Dict[str, Dict[str, int]]] = {}
+        current: Optional[str] = None
+        for line in output.splitlines():
+            m = re.match(r'ipv[46]\s+Firewall\s+"([^"]+)"', line.strip())
+            if m:
+                current = m.group(1)
+                if current.endswith(" filter"):
+                    current = current[:-len(" filter")]
+                result.setdefault(current, {})
+                continue
+            if current is None:
+                continue
+            cols = re.split(r"\s{2,}", line.strip())
+            if len(cols) < 5:
+                continue
+            rule = cols[0]
+            if rule.lower() == "rule" or set(rule) == {"-"}:
+                continue
+            packets = self._to_int(cols[3])
+            bytes_ = self._to_int(cols[4])
+            if packets is None or bytes_ is None:
+                continue
+            result[current][rule] = {"packets": packets, "bytes": bytes_}
+        return result
+
+    def get_nat_counters(self) -> Dict[str, Dict[str, Dict[str, int]]]:
+        """Per-rule counters from `show nat destination|source statistics`.
+
+        Returns {"destination": {"<rule>": {"packets": N, "bytes": M}}, "source": {...}}.
+        """
+        result: Dict[str, Dict[str, Dict[str, int]]] = {}
+        for kind in ("destination", "source"):
+            rules: Dict[str, Dict[str, int]] = {}
+            try:
+                output = self._post("/show", {"op": "show", "path": ["nat", kind, "statistics"]}) or ""
+                for line in output.splitlines():
+                    cols = re.split(r"\s{2,}", line.strip())
+                    if len(cols) < 3:
+                        continue
+                    if cols[0].lower() == "rule" or set(cols[0]) == {"-"}:
+                        continue
+                    packets = self._to_int(cols[1])
+                    bytes_ = self._to_int(cols[2])
+                    if packets is None or bytes_ is None:
+                        continue
+                    rules[cols[0]] = {"packets": packets, "bytes": bytes_}
+            except VyOSError:
+                pass
+            result[kind] = rules
+        return result
+
     @staticmethod
     def _norm_opt(value, sentinel: str):
         """'any'/'all'/empty mean "not set" in the VyOS 1.5 firewall syntax."""
@@ -337,6 +401,8 @@ class VyOSClient:
             source = rcfg.get("source") or {}
             dest = rcfg.get("destination") or {}
             translation = rcfg.get("translation") or {}
+            src_group = source.get("group") or {}
+            dst_group = dest.get("group") or {}
             iface = rcfg.get("inbound-interface")
             if isinstance(iface, dict):
                 iface = iface.get("name")
@@ -346,6 +412,8 @@ class VyOSClient:
                 protocol=rcfg.get("protocol"),
                 source_address=source.get("address"),
                 destination_address=dest.get("address"),
+                source_address_group=self._scalar(src_group.get("address-group")),
+                destination_address_group=self._scalar(dst_group.get("address-group")),
                 destination_port=dest.get("port"),
                 inbound_interface=iface if isinstance(iface, str) else None,
                 translation_address=translation.get("address"),
@@ -376,6 +444,8 @@ class VyOSClient:
             source = rcfg.get("source") or {}
             dest = rcfg.get("destination") or {}
             translation = rcfg.get("translation") or {}
+            src_group = source.get("group") or {}
+            dst_group = dest.get("group") or {}
             iface = rcfg.get("outbound-interface")
             if isinstance(iface, dict):
                 iface = iface.get("name")
@@ -385,6 +455,8 @@ class VyOSClient:
                 protocol=rcfg.get("protocol"),
                 source_address=source.get("address"),
                 destination_address=dest.get("address"),
+                source_address_group=self._scalar(src_group.get("address-group")),
+                destination_address_group=self._scalar(dst_group.get("address-group")),
                 destination_port=dest.get("port"),
                 outbound_interface=iface if isinstance(iface, str) else None,
                 translation_address=translation.get("address"),
@@ -794,6 +866,21 @@ class VyOSClient:
             name_servers=sorted(name_servers),
             ntp_servers=sorted(ntp_servers),
         )
+
+    def reboot(self) -> None:
+        """Op-mode reboot. The device (and its API) goes down mid-request —
+        a dropped connection here means success, so errors are expected."""
+        try:
+            self._post("/reboot", {"op": "reboot"})
+        except VyOSError:
+            pass
+
+    def poweroff(self) -> None:
+        """Op-mode poweroff. Same caveat as reboot(): errors are expected."""
+        try:
+            self._post("/poweroff", {"op": "poweroff"})
+        except VyOSError:
+            pass
 
     # ─── System resources ─────────────────────────────────────────
 

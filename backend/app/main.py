@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.routers import interfaces, firewall, staging, logs, system, services, nat, haproxy, pki, routes, auth as auth_router, deploy
+from app.routers import interfaces, firewall, staging, logs, system, services, nat, haproxy, pki, routes, auth as auth_router, deploy, address_groups
 from app.services import auth
 
 app = FastAPI(title="VyOS Web Gateway", version="0.2.0")
@@ -34,6 +34,7 @@ async def require_session(request: Request, call_next):
 app.include_router(auth_router.router)
 app.include_router(interfaces.router)
 app.include_router(firewall.router)
+app.include_router(address_groups.router)
 app.include_router(staging.router)
 app.include_router(logs.router)
 app.include_router(system.router)

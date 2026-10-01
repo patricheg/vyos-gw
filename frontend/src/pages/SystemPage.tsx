@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { getSystem, updateSystem, getSystemResources, downloadBackup, restoreBackup, getDeployStatus, provisionDeploy } from '../api/client';
+import { getSystem, updateSystem, getSystemResources, downloadBackup, restoreBackup, getDeployStatus, provisionDeploy, rebootDevice, shutdownDevice } from '../api/client';
 import type { DeployStatus } from '../api/client';
 import type { SystemConfig, SystemResources } from '../types';
 import { TIMEZONES } from '../timezones';
@@ -74,6 +74,27 @@ export default function SystemPage() {
   const [deployMsg, setDeployMsg] = useState('');
   const [deployErr, setDeployErr] = useState('');
   const [deploying, setDeploying] = useState(false);
+  const [powerAction, setPowerAction] = useState<'reboot' | 'shutdown' | null>(null);
+  const [powerMsg, setPowerMsg] = useState('');
+  const [powerBusy, setPowerBusy] = useState(false);
+
+  const handlePower = async () => {
+    const action = powerAction;
+    setPowerAction(null);
+    if (!action) return;
+    setPowerBusy(true);
+    try {
+      if (action === 'reboot') await rebootDevice();
+      else await shutdownDevice();
+    } catch {
+      // the device drops the connection while going down — that is success
+    } finally {
+      setPowerBusy(false);
+      setPowerMsg(action === 'reboot'
+        ? 'Device is rebooting, wait ~1 minute and reload the page'
+        : 'Device is shutting down — it will not come back until powered on manually');
+    }
+  };
 
   const loadDeploy = () => {
     getDeployStatus()
@@ -343,6 +364,22 @@ export default function SystemPage() {
                   </>
                 )}
               </div>
+              {/* Device power */}
+              <div className="mt-6 p-4 bg-gray-800 rounded-lg border border-gray-700">
+                <h3 className="font-bold mb-1">Device power</h3>
+                <p className="text-xs text-gray-500 mb-3">
+                  Reboot or shut down the router. The console becomes unavailable immediately; after a reboot it comes back on its own.
+                </p>
+                {powerMsg && <div className="mb-2 p-2 bg-yellow-900/40 rounded border border-yellow-700 text-sm text-yellow-200">{powerMsg}</div>}
+                <div className="flex gap-2">
+                  <button onClick={() => setPowerAction('reboot')} disabled={powerBusy} className="px-3 py-2 bg-blue-600 rounded hover:bg-blue-500 text-white text-sm font-medium disabled:opacity-50">
+                    Reboot
+                  </button>
+                  <button onClick={() => setPowerAction('shutdown')} disabled={powerBusy} className="px-3 py-2 bg-red-700 rounded hover:bg-red-600 text-white text-sm font-medium disabled:opacity-50">
+                    Shutdown
+                  </button>
+                </div>
+              </div>
             </>
           )}
         </div>
@@ -396,6 +433,29 @@ export default function SystemPage() {
           )}
         </div>
       </div>
+
+      {/* Power confirm modal */}
+      {powerAction && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+          <div className="bg-gray-800 rounded-xl p-6 w-full max-w-md border border-gray-700 shadow-xl">
+            <h3 className="text-lg font-bold mb-2">{powerAction === 'reboot' ? 'Reboot the device?' : 'Shut down the device?'}</h3>
+            <p className="text-sm text-gray-400 mb-4">
+              {powerAction === 'reboot'
+                ? 'The router will reboot. All connections (including this console) drop; the console comes back automatically about a minute after boot.'
+                : 'The router will power off. You will need physical access (or a PDU) to turn it back on.'}
+            </p>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setPowerAction(null)} className="px-4 py-2 rounded bg-gray-700 hover:bg-gray-600">Cancel</button>
+              <button
+                onClick={handlePower}
+                className={`px-4 py-2 rounded text-white font-medium ${powerAction === 'reboot' ? 'bg-blue-600 hover:bg-blue-500' : 'bg-red-700 hover:bg-red-600'}`}
+              >
+                {powerAction === 'reboot' ? 'Reboot' : 'Shutdown'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

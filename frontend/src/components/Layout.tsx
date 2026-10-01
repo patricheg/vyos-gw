@@ -126,6 +126,7 @@ export default function Layout({ children, onLogout }: { children: React.ReactNo
           <nav className="flex flex-wrap gap-1.5">
             {nav('/', 'Interfaces')}
             {nav('/firewall', 'Firewall')}
+            {nav('/address-groups', 'Address Groups')}
             {nav('/nat', 'NAT')}
             {nav('/routes', 'Routes')}
             {nav('/haproxy', 'HAProxy')}

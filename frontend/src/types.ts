@@ -36,6 +36,18 @@ export interface AddressGroup {
   addresses: string[];
 }
 
+/** Per-rule packet/byte counters, keyed by rule number ("default" included) */
+export interface RuleCounter {
+  packets: number;
+  bytes: number;
+}
+export type RuleCounterMap = Record<string, RuleCounter>;
+export type FirewallCounters = Record<string, RuleCounterMap>;
+export interface NatCounters {
+  destination: RuleCounterMap;
+  source: RuleCounterMap;
+}
+
 export interface FirewallRuleset {
   name: string;
   default_action: 'accept' | 'drop' | 'reject';
@@ -108,6 +120,8 @@ export interface NatRule {
   protocol: string | null;
   source_address: string | null;
   destination_address: string | null;
+  source_address_group: string | null;
+  destination_address_group: string | null;
   destination_port: string | null;
   inbound_interface: string | null;
   translation_address: string | null;
@@ -122,6 +136,8 @@ export interface SourceNatRule {
   protocol: string | null;
   source_address: string | null;
   destination_address: string | null;
+  source_address_group: string | null;
+  destination_address_group: string | null;
   destination_port: string | null;
   outbound_interface: string | null;
   /** "masquerade" or an IPv4 address */

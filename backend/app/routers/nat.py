@@ -11,6 +11,12 @@ from app.services.staging import staging_area
 router = APIRouter(prefix="/api/nat", tags=["nat"])
 
 
+@router.get("/counters")
+async def nat_counters():
+    """Per-rule packet/byte counters: {"destination": {...}, "source": {...}}."""
+    return await asyncio.to_thread(vyos_client.get_nat_counters)
+
+
 def _norm_opt(value, sentinel: str):
     if value is None:
         return None
@@ -32,6 +38,10 @@ def _validate(rule: NatRuleCreate):
             status_code=400,
             detail="A port-forward rule needs a translation address and/or port",
         )
+    if _norm_opt(rule.source_address, "any") and rule.source_address_group:
+        raise HTTPException(status_code=400, detail="Source: choose either an address or an address group, not both")
+    if _norm_opt(rule.destination_address, "any") and rule.destination_address_group:
+        raise HTTPException(status_code=400, detail="Destination: choose either an address or an address group, not both")
 
 
 def _stage_rule_commands(rule: NatRule):
@@ -45,8 +55,12 @@ def _stage_rule_commands(rule: NatRule):
         staging_area.add(f"{base} protocol '{protocol}'", f"NAT rule {rule.number} protocol", "nat")
     if src_addr:
         staging_area.add(f"{base} source address '{src_addr}'", f"NAT rule {rule.number} source", "nat")
+    if rule.source_address_group:
+        staging_area.add(f"{base} source group address-group '{rule.source_address_group}'", f"NAT rule {rule.number} source group", "nat")
     if dst_addr:
         staging_area.add(f"{base} destination address '{dst_addr}'", f"NAT rule {rule.number} dest", "nat")
+    if rule.destination_address_group:
+        staging_area.add(f"{base} destination group address-group '{rule.destination_address_group}'", f"NAT rule {rule.number} dest group", "nat")
     if rule.destination_port:
         staging_area.add(f"{base} destination port '{rule.destination_port}'", f"NAT rule {rule.number} dst port", "nat")
     if rule.inbound_interface:
@@ -127,6 +141,10 @@ def _validate_source(rule: SourceNatRuleCreate):
             status_code=400,
             detail="A source NAT rule needs a translation address (or 'masquerade')",
         )
+    if _norm_opt(rule.source_address, "any") and rule.source_address_group:
+        raise HTTPException(status_code=400, detail="Source: choose either an address or an address group, not both")
+    if _norm_opt(rule.destination_address, "any") and rule.destination_address_group:
+        raise HTTPException(status_code=400, detail="Destination: choose either an address or an address group, not both")
 
 
 def _stage_source_rule_commands(rule: SourceNatRule):
@@ -140,8 +158,12 @@ def _stage_source_rule_commands(rule: SourceNatRule):
         staging_area.add(f"{base} protocol '{protocol}'", f"SNAT rule {rule.number} protocol", "nat")
     if src_addr:
         staging_area.add(f"{base} source address '{src_addr}'", f"SNAT rule {rule.number} source", "nat")
+    if rule.source_address_group:
+        staging_area.add(f"{base} source group address-group '{rule.source_address_group}'", f"SNAT rule {rule.number} source group", "nat")
     if dst_addr:
         staging_area.add(f"{base} destination address '{dst_addr}'", f"SNAT rule {rule.number} dest", "nat")
+    if rule.destination_address_group:
+        staging_area.add(f"{base} destination group address-group '{rule.destination_address_group}'", f"SNAT rule {rule.number} dest group", "nat")
     if rule.destination_port:
         staging_area.add(f"{base} destination port '{rule.destination_port}'", f"SNAT rule {rule.number} dst port", "nat")
     if rule.outbound_interface:

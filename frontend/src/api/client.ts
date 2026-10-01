@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { Interface, FirewallRuleset, FirewallRule, LogEntry, SystemConfig, SystemResources, FirewallLogEntry, ServiceInfo, NatRule, SourceNatRule, HaproxyConfig, HaproxyService, HaproxyBackend, HaproxyGlobals, GeoipStatus, PkiConfig, PkiAcmeCreate, RouteEntry, StaticRoute, AddressGroup } from '../types';
+import type { Interface, FirewallRuleset, FirewallRule, LogEntry, SystemConfig, SystemResources, FirewallLogEntry, ServiceInfo, NatRule, SourceNatRule, HaproxyConfig, HaproxyService, HaproxyBackend, HaproxyGlobals, GeoipStatus, PkiConfig, PkiAcmeCreate, RouteEntry, StaticRoute, AddressGroup, FirewallCounters, NatCounters } from '../types';
 
 const api = axios.create({
   baseURL: '/api',
@@ -48,13 +48,17 @@ export const updateRule = (chain: string, number: number, rule: FirewallRule) =>
 export const reorderChain = (chain: string, orderedNumbers: number[]) =>
   api.post(`/firewall/chains/${chain}/reorder`, orderedNumbers).then(r => r.data);
 
-export const getAddressGroups = () => api.get<AddressGroup[]>('/firewall/groups').then(r => r.data);
+export const getAddressGroups = () => api.get<AddressGroup[]>('/address-groups/').then(r => r.data);
 export const addAddressGroup = (group: AddressGroup) =>
-  api.post('/firewall/groups', group).then(r => r.data);
+  api.post('/address-groups/', group).then(r => r.data);
 export const updateAddressGroup = (name: string, group: AddressGroup) =>
-  api.put(`/firewall/groups/${name}`, group).then(r => r.data);
+  api.put(`/address-groups/${name}`, group).then(r => r.data);
 export const deleteAddressGroup = (name: string) =>
-  api.delete(`/firewall/groups/${name}`).then(r => r.data);
+  api.delete(`/address-groups/${name}`).then(r => r.data);
+
+// Rule counters (op-mode, loaded on demand — no polling)
+export const getFirewallCounters = () => api.get<FirewallCounters>('/firewall/counters').then(r => r.data);
+export const getNatCounters = () => api.get<NatCounters>('/nat/counters').then(r => r.data);
 
 // Logs
 export interface LogQuery {
@@ -71,6 +75,10 @@ export const getSystem = () => api.get<SystemConfig>('/system/').then(r => r.dat
 export const updateSystem = (data: SystemConfig) => api.put('/system/', data).then(r => r.data);
 export const getSystemResources = () => api.get<SystemResources>('/system/resources').then(r => r.data);
 export const saveSystemConfig = () => api.post<{ status: string; detail: string }>('/system/save').then(r => r.data);
+// The device drops the connection while going down — a failed request here
+// usually means the action actually started.
+export const rebootDevice = () => api.post('/system/reboot', null, { timeout: 15000 }).then(r => r.data);
+export const shutdownDevice = () => api.post('/system/shutdown', null, { timeout: 15000 }).then(r => r.data);
 export const downloadBackup = async () => {
   const r = await api.get('/system/backup', { responseType: 'blob' });
   const dispo = String(r.headers['content-disposition'] || '');
