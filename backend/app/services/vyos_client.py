@@ -277,6 +277,7 @@ class VyOSClient:
                 state_established="established" in state,
                 state_related="related" in state,
                 state_new="new" in state,
+                state_invalid="invalid" in state,
             ))
         ruleset.rules.sort(key=lambda r: r.number)
         return ruleset

@@ -38,6 +38,7 @@ class FirewallRuleBase(BaseModel):
     state_established: Optional[bool] = None
     state_related: Optional[bool] = None
     state_new: Optional[bool] = None
+    state_invalid: Optional[bool] = None
 
 class FirewallRuleCreate(FirewallRuleBase):
     pass

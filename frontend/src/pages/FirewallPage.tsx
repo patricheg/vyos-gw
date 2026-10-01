@@ -103,6 +103,16 @@ function SortableRuleItem({ rule, chainName, counter, onDelete, onEdit, isWorkin
       <div className="flex-1 text-slate-400 truncate">
         {rule.description || '-'}
         {rule.log && <span className={`ml-2 align-middle ${TAG.indigo}`}>LOG</span>}
+        {(rule.state_established || rule.state_related || rule.state_new || rule.state_invalid) && (
+          <span className={`ml-2 align-middle ${TAG.cyan}`}>
+            {[
+              rule.state_established && 'est',
+              rule.state_related && 'rel',
+              rule.state_new && 'new',
+              rule.state_invalid && 'inv',
+            ].filter(Boolean).join(',')}
+          </span>
+        )}
       </div>
       <div
         className="w-24 text-right font-mono text-xs text-slate-500 whitespace-nowrap"
@@ -205,6 +215,43 @@ export default function FirewallPage() {
     }
   };
 
+  const handleQuickEstRel = async (chain: FirewallRuleset) => {
+    const maxNum = chain.rules.length > 0 ? Math.max(...chain.rules.map(r => r.number)) : 0;
+    const estRel: FirewallRule = {
+      number: maxNum + 10,
+      action: 'accept',
+      protocol: null,
+      source_address: null,
+      destination_address: null,
+      source_group: null,
+      destination_group: null,
+      source_geoip: null,
+      source_geoip_inverse: false,
+      destination_geoip: null,
+      destination_geoip_inverse: false,
+      source_port: null,
+      destination_port: null,
+      description: 'Allow established/related',
+      log: null,
+      state_established: true,
+      state_related: true,
+      state_new: null,
+      state_invalid: null,
+    };
+    setWorking('estrel-' + chain.name);
+    setErr('');
+    setMsg('');
+    try {
+      await addRule(chain.name, estRel);
+      setMsg(`Established/related accept staged in ${chain.name.toUpperCase()} — review and commit`);
+      load();
+    } catch (e: any) {
+      setErr('Quick rule error: ' + (e.response?.data?.detail || e.message));
+    } finally {
+      setWorking(null);
+    }
+  };
+
   const parseGeoip = (text: string): string[] | null => {
     const codes = text.split(/[\s,]+/).map(c => c.trim().toLowerCase()).filter(Boolean);
     return codes.length > 0 ? [...new Set(codes)].sort() : null;
@@ -229,6 +276,7 @@ export default function FirewallPage() {
     state_established: newRule.state_established ?? null,
     state_related: newRule.state_related ?? null,
     state_new: newRule.state_new ?? null,
+    state_invalid: newRule.state_invalid ?? null,
   });
 
   const handleAddRule = async () => {
@@ -440,6 +488,14 @@ export default function FirewallPage() {
                     default: {chain.default_action} ⇄
                   </button>
                   <button
+                    onClick={() => handleQuickEstRel(chain)}
+                    disabled={isWorking('estrel-' + chain.name)}
+                    title="Stage an accept rule matching established/related connections (return traffic)"
+                    className={btnSecondarySm}
+                  >
+                    {isWorking('estrel-' + chain.name) ? 'Adding…' : '+ EST/REL'}
+                  </button>
+                  <button
                     onClick={() => openAddRule(chain.name)}
                     disabled={isWorking('add-rule')}
                     className={btnSuccessSm}
@@ -616,6 +672,29 @@ export default function FirewallPage() {
                 <input type="checkbox" checked={newRule.log ?? false} onChange={e => setNewRule({...newRule, log: e.target.checked})} className={checkboxCls} />
                 <span>Log matching packets <span className="text-slate-500">(visible on the Logs page, source «firewall»)</span></span>
               </label>
+              <div className="col-span-2">
+                <label className={labelCls}>
+                  Connection state <span className="text-slate-500 font-normal">(match only packets in these states; none checked = any state)</span>
+                </label>
+                <div className="flex flex-wrap gap-4">
+                  {([
+                    ['state_established', 'established'],
+                    ['state_related', 'related'],
+                    ['state_new', 'new'],
+                    ['state_invalid', 'invalid'],
+                  ] as const).map(([key, label]) => (
+                    <label key={key} className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={newRule[key] ?? false}
+                        onChange={e => setNewRule({ ...newRule, [key]: e.target.checked })}
+                        className={checkboxCls}
+                      />
+                      {label}
+                    </label>
+                  ))}
+                </div>
+              </div>
             </div>
             {err && <div className="mt-4 p-3 rounded-lg bg-rose-500/10 border border-rose-500/30 text-sm text-rose-200">{err}</div>}
             <div className="flex justify-end gap-2 mt-6">
@@ -636,6 +715,7 @@ export default function FirewallPage() {
           <li><strong>Forward</strong> filters transit traffic passing through the router.</li>
           <li><strong>Output</strong> filters traffic the router generates.</li>
           <li>Rules are checked in number order, first match wins. Unmatched traffic hits the chain's <strong>default action</strong>.</li>
+          <li><strong>+ EST/REL</strong> stages an accept rule for established/related connections — this lets return traffic back in when the default action is drop.</li>
           <li>Reusable <strong>address groups</strong> are managed on the <strong>Address Groups</strong> page and selected here as <span className="font-mono text-violet-300">@group</span>.</li>
           <li>Everything is applied via the <strong>pending changes</strong> panel on top — review and commit there.</li>
         </ol>

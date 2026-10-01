@@ -28,6 +28,7 @@ export interface FirewallRule {
   state_established: boolean | null;
   state_related: boolean | null;
   state_new: boolean | null;
+  state_invalid: boolean | null;
 }
 
 export interface AddressGroup {

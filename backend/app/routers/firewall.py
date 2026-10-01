@@ -157,6 +157,8 @@ def _stage_rule_commands(chain: str, rule: FirewallRule):
         staging_area.add(f"{base} state related", f"Rule {rule.number} state", "firewall")
     if rule.state_new:
         staging_area.add(f"{base} state new", f"Rule {rule.number} state", "firewall")
+    if rule.state_invalid:
+        staging_area.add(f"{base} state invalid", f"Rule {rule.number} state", "firewall")
 
 
 @router.post("/chains/{name}/reorder")
