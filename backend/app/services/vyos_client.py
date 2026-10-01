@@ -300,10 +300,26 @@ class VyOSClient:
             groups.append(AddressGroup(
                 name=name,
                 description=VyOSClient._scalar(gcfg.get("description")),
-                addresses=sorted(self._as_list(gcfg.get("address"))),
+                addresses=sorted(self._pretty_addr(a) for a in self._as_list(gcfg.get("address"))),
             ))
         groups.sort(key=lambda g: g.name)
         return groups
+
+    @staticmethod
+    def _pretty_addr(addr: str) -> str:
+        """Ренджи, совпадающие с границами CIDR, показываем как CIDR
+        (мы сами конвертировали CIDR в range при записи — VyOS 1.5 не
+        принимает префиксы в address-group)."""
+        import ipaddress
+        m = re.match(r"^(\d+\.\d+\.\d+\.\d+)-(\d+\.\d+\.\d+\.\d+)$", addr)
+        if not m:
+            return addr
+        try:
+            nets = list(ipaddress.summarize_address_range(
+                ipaddress.ip_address(m.group(1)), ipaddress.ip_address(m.group(2))))
+        except ValueError:
+            return addr
+        return str(nets[0]) if len(nets) == 1 else addr
 
     # ─── Rule counters (op-mode) ──────────────────────────────────
 

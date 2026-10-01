@@ -228,7 +228,13 @@ def _stage_group_commands(group: AddressGroup):
     if group.description:
         staging_area.add(f"{base} description '{group.description}'", f"Address group {group.name} description", "firewall")
     for addr in group.addresses:
-        staging_area.add(f"{base} address '{addr.strip()}'", f"Address group {group.name} + {addr.strip()}", "firewall")
+        a = addr.strip()
+        # VyOS 1.5 address-group принимает только host/range; CIDR превращаем
+        # в инклюзивный диапазон (семантика совпадения идентична)
+        if "/" in a:
+            net = ipaddress.ip_network(a)
+            a = f"{net.network_address}-{net.broadcast_address}"
+        staging_area.add(f"{base} address '{a}'", f"Address group {group.name} + {a}", "firewall")
 
 
 @router.get("/groups", response_model=List[AddressGroup])

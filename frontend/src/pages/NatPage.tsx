@@ -61,6 +61,13 @@ export default function NatPage() {
 
   useEffect(() => { load(); }, []);
 
+  // Live packet counters, refreshed every second
+  useEffect(() => {
+    const tick = () => { getNatCounters().then(setCounters).catch(() => {}); };
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, []);
+
   // Reload actual config after staged changes are committed or discarded
   useEffect(() => {
     const handler = () => load();
