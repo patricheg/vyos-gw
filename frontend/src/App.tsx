@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Routes, Route } from 'react-router-dom';
 import Layout from './components/Layout';
 import LoginPage from './pages/LoginPage';
+import DashboardPage from './pages/DashboardPage';
 import InterfacesPage from './pages/InterfacesPage';
 import FirewallPage from './pages/FirewallPage';
 import AddressGroupsPage from './pages/AddressGroupsPage';
@@ -56,7 +57,8 @@ export default function App() {
   return (
     <Layout onLogout={handleLogout}>
       <Routes>
-        <Route path="/" element={<InterfacesPage />} />
+        <Route path="/" element={<DashboardPage />} />
+        <Route path="/interfaces" element={<InterfacesPage />} />
         <Route path="/firewall" element={<FirewallPage />} />
         <Route path="/address-groups" element={<AddressGroupsPage />} />
         <Route path="/nat" element={<NatPage />} />

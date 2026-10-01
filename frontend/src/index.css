@@ -5,3 +5,19 @@
 body {
   @apply bg-slate-900 text-slate-100 font-sans antialiased;
 }
+
+/* uPlot dark-theme overrides */
+.u-legend {
+  color: #94a3b8;
+  font-size: 11px;
+}
+.u-legend .u-marker {
+  border-radius: 3px;
+}
+.u-cursor-x,
+.u-cursor-y {
+  border-color: #475569 !important;
+}
+.u-select {
+  background: rgba(99, 102, 241, 0.15);
+}

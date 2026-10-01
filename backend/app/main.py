@@ -5,8 +5,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.routers import interfaces, firewall, staging, logs, system, services, nat, haproxy, pki, routes, auth as auth_router, deploy, address_groups
-from app.services import auth
+from app.routers import interfaces, firewall, staging, logs, system, services, nat, haproxy, pki, routes, auth as auth_router, deploy, address_groups, metrics as metrics_router
+from app.services import auth, metrics
 
 app = FastAPI(title="VyOS Web Gateway", version="0.2.0")
 
@@ -44,6 +44,12 @@ app.include_router(routes.router)
 app.include_router(haproxy.router)
 app.include_router(pki.router)
 app.include_router(deploy.router)
+app.include_router(metrics_router.router)
+
+
+@app.on_event("startup")
+def start_metrics_collector():
+    metrics.start()
 
 
 @app.get("/api/health")

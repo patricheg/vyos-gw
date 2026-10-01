@@ -299,3 +299,34 @@ export interface StaticRoute {
   disabled: boolean;
 }
 
+
+export interface MetricsSystemSample {
+  ts: number;
+  cpu_pct: number | null;
+  mem_used_mb: number | null;
+  mem_total_mb: number | null;
+  load1: number | null;
+  disk_read_bps: number | null;
+  disk_write_bps: number | null;
+  disk_used_pct: number | null;
+  disk_total_mb: number | null;
+}
+
+export interface MetricsCurrent {
+  system: Partial<MetricsSystemSample>;
+  interfaces: Record<string, { rx_bps: number | null; tx_bps: number | null }>;
+}
+
+export interface MetricsHistory {
+  ts: number[];
+  system: {
+    cpu_pct: (number | null)[];
+    mem_used_mb: (number | null)[];
+    mem_total_mb: (number | null)[];
+    load1: (number | null)[];
+    disk_read_bps: (number | null)[];
+    disk_write_bps: (number | null)[];
+    disk_used_pct: (number | null)[];
+  };
+  interfaces: Record<string, { ts: number[]; rx_bps: (number | null)[]; tx_bps: (number | null)[] }>;
+}

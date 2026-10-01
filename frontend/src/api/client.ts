@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { Interface, FirewallRuleset, FirewallRule, LogEntry, SystemConfig, SystemResources, FirewallLogEntry, ServiceInfo, NatRule, SourceNatRule, HaproxyConfig, HaproxyService, HaproxyBackend, HaproxyGlobals, GeoipStatus, PkiConfig, PkiAcmeCreate, RouteEntry, StaticRoute, AddressGroup, FirewallCounters, NatCounters } from '../types';
+import type { Interface, FirewallRuleset, FirewallRule, LogEntry, SystemConfig, SystemResources, FirewallLogEntry, ServiceInfo, NatRule, SourceNatRule, HaproxyConfig, HaproxyService, HaproxyBackend, HaproxyGlobals, GeoipStatus, PkiConfig, PkiAcmeCreate, RouteEntry, StaticRoute, AddressGroup, FirewallCounters, NatCounters, MetricsCurrent, MetricsHistory } from '../types';
 
 const api = axios.create({
   baseURL: '/api',
@@ -233,3 +233,8 @@ export const getStaged = () => api.get<StagedChange[]>('/staged/').then(r => r.d
 export const commitStaged = () => api.post('/staged/commit').then(r => r.data);
 export const discardStaged = () => api.delete('/staged/').then(r => r.data);
 export const removeStaged = (id: string) => api.delete(`/staged/${id}`).then(r => r.data);
+
+// Dashboard metrics (host /proc collector, 1s samples)
+export const getMetricsCurrent = () => api.get<MetricsCurrent>('/metrics/current').then(r => r.data);
+export const getMetricsHistory = (minutes: number) =>
+  api.get<MetricsHistory>(`/metrics/history?minutes=${minutes}`).then(r => r.data);
